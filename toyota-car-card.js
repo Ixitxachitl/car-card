@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.11.0";
+const CARD_VERSION = "1.12.0";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1156,6 +1156,7 @@ class ToyotaCarCard extends HTMLElement {
       show_buttons: config.show_buttons !== false,
       lock_entity: config.lock_entity || null,
       engine_status_entity: config.engine_status_entity || null,
+      vehicle: config.vehicle || null,
       ...config,
     };
 
@@ -1171,7 +1172,14 @@ class ToyotaCarCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 6;
+    if (!this._config) return 8;
+    let size = 4; // header + image
+    if (this._config.show_fuel !== false) size += 1;
+    if (this._config.show_ev === true) size += 1;
+    if (this._config.show_odometer !== false || this._config.show_speed === true || this._config.show_service === true) size += 1;
+    if (this._config.show_buttons !== false) size += 1;
+    if (this._config.show_map !== false) size += 8; // map is 400px = 8 units
+    return size;
   }
 
   _getEntityId(type, name) {
@@ -1687,7 +1695,7 @@ class ToyotaCarCard extends HTMLElement {
             border-radius: 10px;
             overflow: hidden;
             border: 1px solid var(--divider-color, #e0e0e0);
-            height: 300px;
+            height: 400px;
             position: relative;
           }
           .map-wrap > * {
@@ -1811,7 +1819,9 @@ class ToyotaCarCard extends HTMLElement {
               const engEnt = this._config.engine_status_entity;
               const engState = engEnt ? this._getState(engEnt) : null;
               const running = engState && engState.state === "on";
-              this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", {});
+              const vin = this._config.vehicle;
+              if (!vin) return;
+              this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", { vehicle: vin });
             }
           });
         });
@@ -1980,13 +1990,6 @@ class ToyotaCarCardEditor extends HTMLElement {
     this._fireChanged();
   }
 
-  _getEntities(domain) {
-    if (!this._hass) return [];
-    return Object.keys(this._hass.states)
-      .filter((e) => e.startsWith(domain + "."))
-      .sort();
-  }
-
   _render() {
     if (!this._hass || !this._config) return;
     this._rendered = true;
@@ -2118,62 +2121,6 @@ class ToyotaCarCardEditor extends HTMLElement {
           color: var(--secondary-text-color, #727272);
           margin-bottom: 4px;
         }
-        .entity-picker-wrap {
-          position: relative;
-        }
-        .entity-picker-wrap input {
-          width: 100%;
-          box-sizing: border-box;
-          padding: 10px 36px 10px 12px;
-          font-size: 13px;
-          border: 1px solid var(--divider-color, #e0e0e0);
-          border-radius: 8px;
-          background: var(--card-background-color, #fff);
-          color: var(--primary-text-color, #212121);
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .entity-picker-wrap input:focus {
-          border-color: var(--primary-color, #03a9f4);
-        }
-        .entity-picker-wrap input::placeholder {
-          color: var(--secondary-text-color, #999);
-        }
-        .entity-picker-wrap .clear-btn {
-          position: absolute; right: 8px; top: 50%;
-          transform: translateY(-50%);
-          background: none; border: none;
-          color: var(--secondary-text-color, #999);
-          cursor: pointer; font-size: 16px; padding: 2px 4px;
-          line-height: 1;
-        }
-        .dropdown {
-          position: fixed;
-          z-index: 9999;
-          max-height: 200px;
-          overflow-y: auto;
-          background: var(--card-background-color, #fff);
-          border: 1px solid var(--divider-color, #e0e0e0);
-          border-radius: 0 0 8px 8px;
-          box-shadow: 0 6px 16px rgba(0,0,0,0.2);
-        }
-        .dropdown .dd-item {
-          padding: 8px 12px;
-          font-size: 13px;
-          cursor: pointer;
-          color: var(--primary-text-color, #212121);
-        }
-        .dropdown .dd-item:hover,
-        .dropdown .dd-item.active {
-          background: var(--primary-color, #03a9f4);
-          color: #fff;
-        }
-        .dropdown .dd-empty {
-          padding: 10px 12px;
-          font-size: 12px;
-          color: var(--secondary-text-color, #999);
-          font-style: italic;
-        }
       </style>
       <div class="editor" id="editor-root"></div>
     `;
@@ -2241,6 +2188,37 @@ class ToyotaCarCardEditor extends HTMLElement {
     engineHint.style.cssText = "font-size: 12px; color: var(--secondary-text-color, #727272); margin-top: 4px;";
     engineHint.textContent = "Engine button toggles between toyota_na.engine_start and toyota_na.engine_stop based on the status entity.";
     actSection.appendChild(engineHint);
+
+    // VIN / vehicle identifier — HA native device picker
+    const vinWrap = document.createElement("div");
+    vinWrap.className = "entity-row";
+    const vinLabel = document.createElement("label");
+    vinLabel.textContent = "Vehicle";
+    vinWrap.appendChild(vinLabel);
+
+    const devPicker = document.createElement("ha-device-picker");
+    devPicker.hass = this._hass;
+    devPicker.value = this._config.vehicle || "";
+    devPicker.label = "Vehicle (toyota_na)";
+    devPicker.includeIntegrations = ["toyota_na"];
+    devPicker.addEventListener("value-changed", (e) => {
+      const deviceId = e.detail.value || "";
+      // Resolve VIN from device identifiers
+      let vin = deviceId;
+      if (deviceId && this._hass && this._hass.devices && this._hass.devices[deviceId]) {
+        const dev = this._hass.devices[deviceId];
+        const toyotaId = dev.identifiers && dev.identifiers.find((ids) => ids[0] === "toyota_na");
+        if (toyotaId) vin = toyotaId[1];
+      }
+      this._updateConfig("vehicle", vin || null);
+    });
+    vinWrap.appendChild(devPicker);
+
+    const vinHint = document.createElement("div");
+    vinHint.style.cssText = "font-size: 11px; color: var(--secondary-text-color, #727272); margin-top: 2px;";
+    vinHint.textContent = "Required for engine start/stop and other toyota_na actions.";
+    vinWrap.appendChild(vinHint);
+    actSection.appendChild(vinWrap);
 
     editorRoot.appendChild(actSection);
 
@@ -2333,114 +2311,19 @@ class ToyotaCarCardEditor extends HTMLElement {
     lbl.textContent = label;
     row.appendChild(lbl);
 
-    const wrap = document.createElement("div");
-    wrap.className = "entity-picker-wrap";
-
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = currentValue;
-    input.placeholder = `Search ${domain} entities...`;
-
-    const clearBtn = document.createElement("button");
-    clearBtn.className = "clear-btn";
-    clearBtn.textContent = "\u00D7";
-    clearBtn.title = "Clear";
-    clearBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      input.value = "";
-      onChange("");
-      dropdown.style.display = "none";
+    const picker = document.createElement("ha-entity-picker");
+    picker.hass = this._hass;
+    picker.value = currentValue || "";
+    picker.label = label;
+    if (domain) {
+      picker.includeDomains = [domain];
+    }
+    picker.allowCustomEntity = true;
+    picker.addEventListener("value-changed", (e) => {
+      onChange(e.detail.value || "");
     });
 
-    const dropdown = document.createElement("div");
-    dropdown.className = "dropdown";
-    dropdown.style.display = "none";
-
-    const allEntities = this._getEntities(domain);
-    let activeIdx = -1;
-
-    const positionDropdown = () => {
-      const rect = input.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      const dropHeight = Math.min(200, dropdown.scrollHeight || 200);
-      dropdown.style.left = rect.left + "px";
-      dropdown.style.width = rect.width + "px";
-      if (spaceBelow >= dropHeight || spaceBelow >= spaceAbove) {
-        dropdown.style.top = rect.bottom + "px";
-        dropdown.style.bottom = "auto";
-        dropdown.style.borderRadius = "0 0 8px 8px";
-      } else {
-        dropdown.style.bottom = (window.innerHeight - rect.top) + "px";
-        dropdown.style.top = "auto";
-        dropdown.style.borderRadius = "8px 8px 0 0";
-      }
-    };
-
-    const showDropdown = (filter) => {
-      const q = (filter || "").toLowerCase();
-      const matches = q
-        ? allEntities.filter((e) => e.toLowerCase().includes(q))
-        : allEntities;
-
-      if (matches.length === 0) {
-        dropdown.innerHTML = '<div class="dd-empty">No matching entities</div>';
-      } else {
-        dropdown.innerHTML = "";
-        matches.slice(0, 50).forEach((eid, idx) => {
-          const item = document.createElement("div");
-          item.className = "dd-item";
-          item.textContent = eid;
-          item.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            input.value = eid;
-            onChange(eid);
-            dropdown.style.display = "none";
-          });
-          dropdown.appendChild(item);
-        });
-      }
-      activeIdx = -1;
-      dropdown.style.display = "block";
-      positionDropdown();
-    };
-
-    input.addEventListener("focus", () => showDropdown(input.value));
-    input.addEventListener("input", () => showDropdown(input.value));
-    input.addEventListener("blur", () => {
-      setTimeout(() => { dropdown.style.display = "none"; }, 150);
-    });
-    input.addEventListener("keydown", (e) => {
-      const items = dropdown.querySelectorAll(".dd-item");
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        activeIdx = Math.min(activeIdx + 1, items.length - 1);
-        items.forEach((it, i) => it.classList.toggle("active", i === activeIdx));
-        if (items[activeIdx]) items[activeIdx].scrollIntoView({ block: "nearest" });
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        activeIdx = Math.max(activeIdx - 1, 0);
-        items.forEach((it, i) => it.classList.toggle("active", i === activeIdx));
-        if (items[activeIdx]) items[activeIdx].scrollIntoView({ block: "nearest" });
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (activeIdx >= 0 && items[activeIdx]) {
-          input.value = items[activeIdx].textContent;
-          onChange(input.value);
-        } else {
-          onChange(input.value);
-        }
-        dropdown.style.display = "none";
-      } else if (e.key === "Escape") {
-        dropdown.style.display = "none";
-      }
-    });
-
-    wrap.appendChild(input);
-    wrap.appendChild(clearBtn);
-    // Append dropdown to shadow root so it's not clipped by parent overflow
-    this.shadowRoot.appendChild(dropdown);
-    row.appendChild(wrap);
+    row.appendChild(picker);
     return row;
   }
 }
