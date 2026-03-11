@@ -19,12 +19,12 @@ class ToyotaCarCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config.entity_prefix) {
-      throw new Error("Please define entity_prefix (e.g. '2024_camry')");
+    if (!config.entities || Object.keys(config.entities).length === 0) {
+      throw new Error("Please define at least one entity in 'entities'");
     }
     this._config = {
       title: config.title || "Toyota",
-      entity_prefix: config.entity_prefix,
+      entities: config.entities || {},
       image_url: config.image_url || null,
       show_fuel: config.show_fuel !== false,
       show_odometer: config.show_odometer !== false,
@@ -49,7 +49,10 @@ class ToyotaCarCard extends HTMLElement {
   }
 
   _getEntityId(type, name) {
-    return `${type}.${name}_${this._config.entity_prefix}`;
+    if (this._config.entities && this._config.entities[name]) {
+      return this._config.entities[name];
+    }
+    return null;
   }
 
   _getState(entityId) {
@@ -73,8 +76,6 @@ class ToyotaCarCard extends HTMLElement {
 
   _render() {
     if (!this._config || !this._hass) return;
-
-    const p = this._config.entity_prefix;
 
     // Sensor entity IDs
     const fuelId = this._getEntityId("sensor", "fuel_level");
@@ -712,26 +713,104 @@ class ToyotaCarCard extends HTMLElement {
   static getStubConfig() {
     return {
       title: "My Toyota",
-      entity_prefix: "2024_camry",
+      entities: {},
     };
   }
 }
+
+// ── Entity key definitions ──
+const ENTITY_KEYS = [
+  { key: "fuel_level", label: "Fuel Level", section: "Fuel & Range", domain: "sensor" },
+  { key: "distance_to_empty", label: "Distance to Empty", section: "Fuel & Range", domain: "sensor" },
+  { key: "odometer", label: "Odometer", section: "General", domain: "sensor" },
+  { key: "speed", label: "Speed", section: "General", domain: "sensor" },
+  { key: "next_service", label: "Next Service", section: "General", domain: "sensor" },
+  { key: "last_update_timestamp", label: "Last Update", section: "General", domain: "sensor" },
+  { key: "front_driver_tire", label: "Front Driver Tire", section: "Tires", domain: "sensor" },
+  { key: "front_passenger_tire", label: "Front Passenger Tire", section: "Tires", domain: "sensor" },
+  { key: "rear_driver_tire", label: "Rear Driver Tire", section: "Tires", domain: "sensor" },
+  { key: "rear_passenger_tire", label: "Rear Passenger Tire", section: "Tires", domain: "sensor" },
+  { key: "ev_battery_level", label: "EV Battery Level", section: "EV", domain: "sensor" },
+  { key: "ev_range", label: "EV Range", section: "EV", domain: "sensor" },
+  { key: "front_driver_door", label: "Front Driver Door", section: "Doors", domain: "binary_sensor" },
+  { key: "front_passenger_door", label: "Front Passenger Door", section: "Doors", domain: "binary_sensor" },
+  { key: "rear_driver_door", label: "Rear Driver Door", section: "Doors", domain: "binary_sensor" },
+  { key: "rear_passenger_door", label: "Rear Passenger Door", section: "Doors", domain: "binary_sensor" },
+  { key: "hood", label: "Hood", section: "Doors", domain: "binary_sensor" },
+  { key: "trunk", label: "Trunk", section: "Doors", domain: "binary_sensor" },
+  { key: "front_driver_window", label: "Front Driver Window", section: "Windows", domain: "binary_sensor" },
+  { key: "front_passenger_window", label: "Front Passenger Window", section: "Windows", domain: "binary_sensor" },
+  { key: "rear_driver_window", label: "Rear Driver Window", section: "Windows", domain: "binary_sensor" },
+  { key: "rear_passenger_window", label: "Rear Passenger Window", section: "Windows", domain: "binary_sensor" },
+  { key: "moonroof", label: "Moonroof", section: "Windows", domain: "binary_sensor" },
+  { key: "front_driver_door_lock", label: "Front Driver Door Lock", section: "Locks", domain: "binary_sensor" },
+  { key: "front_passenger_door_lock", label: "Front Passenger Door Lock", section: "Locks", domain: "binary_sensor" },
+  { key: "rear_driver_door_lock", label: "Rear Driver Door Lock", section: "Locks", domain: "binary_sensor" },
+  { key: "rear_passenger_door_lock", label: "Rear Passenger Door Lock", section: "Locks", domain: "binary_sensor" },
+  { key: "trunk_door_lock", label: "Trunk Lock", section: "Locks", domain: "binary_sensor" },
+];
 
 // ── Visual card editor ──
 class ToyotaCarCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { ...config };
+    if (!this._config.entities) this._config.entities = {};
     this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
+    if (this.shadowRoot) {
+      this._render();
+    }
+  }
+
+  _getEntitiesByDomain(domain) {
+    if (!this._hass) return [];
+    return Object.keys(this._hass.states)
+      .filter((eid) => eid.startsWith(domain + "."))
+      .sort();
   }
 
   _render() {
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
+
+    const entities = this._config.entities || {};
+
+    // Group entity keys by section
+    const sections = {};
+    for (const def of ENTITY_KEYS) {
+      if (!sections[def.section]) sections[def.section] = [];
+      sections[def.section].push(def);
+    }
+
+    const entitySectionsHtml = Object.entries(sections)
+      .map(
+        ([sectionName, defs]) => `
+          <div class="entity-section">
+            <div class="section-title">${sectionName}</div>
+            ${defs
+              .map(
+                (def) => `
+              <div class="entity-row">
+                <label>${def.label}</label>
+                <select data-entity-key="${def.key}">
+                  <option value="">(none)</option>
+                  ${this._getEntitiesByDomain(def.domain)
+                    .map(
+                      (eid) =>
+                        `<option value="${this._escapeAttr(eid)}" ${entities[def.key] === eid ? "selected" : ""}>${this._escapeAttr(eid)}</option>`
+                    )
+                    .join("")}
+                </select>
+              </div>`
+              )
+              .join("")}
+          </div>`
+      )
+      .join("");
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -743,17 +822,24 @@ class ToyotaCarCardEditor extends HTMLElement {
           background: var(--card-background-color, #fff);
           color: var(--primary-text-color);
         }
+        .editor select {
+          width: 100%; padding: 6px 8px; box-sizing: border-box;
+          border: 1px solid var(--divider-color, #ccc); border-radius: 6px;
+          background: var(--card-background-color, #fff);
+          color: var(--primary-text-color);
+          font-size: 0.85em;
+        }
         .editor .toggle-row { display: flex; align-items: center; justify-content: space-between; margin: 6px 0; }
         .editor .toggle-row span { font-size: 0.85em; }
         .editor .hint { font-size: 0.75em; color: var(--secondary-text-color); margin-top: 2px; }
+        .entity-section { margin-top: 16px; border: 1px solid var(--divider-color, #e0e0e0); border-radius: 8px; padding: 10px 12px; }
+        .section-title { font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px; color: var(--primary-color, #03a9f4); margin-bottom: 6px; }
+        .entity-row { margin-bottom: 6px; }
+        .entity-row label { margin: 2px 0; font-size: 0.82em; font-weight: 400; }
       </style>
       <div class="editor">
         <label>Title</label>
         <input type="text" id="title" value="${this._escapeAttr(this._config.title || "")}" />
-
-        <label>Entity Prefix</label>
-        <input type="text" id="entity_prefix" value="${this._escapeAttr(this._config.entity_prefix || "")}" />
-        <div class="hint">The suffix of your sensor entity IDs, e.g. "2024_camry" if entities are sensor.fuel_level_2024_camry</div>
 
         <label>Vehicle Image URL (optional)</label>
         <input type="text" id="image_url" value="${this._escapeAttr(this._config.image_url || "")}" />
@@ -768,6 +854,10 @@ class ToyotaCarCardEditor extends HTMLElement {
         ${this._toggleRow("show_ev", "Show EV Info", this._config.show_ev || false)}
         ${this._toggleRow("show_speed", "Show Speed", this._config.show_speed || false)}
         ${this._toggleRow("show_service", "Show Next Service", this._config.show_service || false)}
+
+        <div style="margin-top: 16px; font-weight: 600; font-size: 0.95em;">Entities</div>
+        <div class="hint" style="margin-bottom: 8px;">Select the entity for each sensor. Leave empty to skip.</div>
+        ${entitySectionsHtml}
       </div>
     `;
 
@@ -776,11 +866,6 @@ class ToyotaCarCardEditor extends HTMLElement {
       this._updateConfig("title", e.target.value);
     });
     this.shadowRoot
-      .getElementById("entity_prefix")
-      .addEventListener("change", (e) => {
-        this._updateConfig("entity_prefix", e.target.value);
-      });
-    this.shadowRoot
       .getElementById("image_url")
       .addEventListener("change", (e) => {
         this._updateConfig("image_url", e.target.value);
@@ -788,6 +873,19 @@ class ToyotaCarCardEditor extends HTMLElement {
     this.shadowRoot.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
       cb.addEventListener("change", (e) => {
         this._updateConfig(e.target.dataset.key, e.target.checked);
+      });
+    });
+    this.shadowRoot.querySelectorAll("select[data-entity-key]").forEach((sel) => {
+      sel.addEventListener("change", (e) => {
+        const key = e.target.dataset.entityKey;
+        const val = e.target.value;
+        const entities = { ...(this._config.entities || {}) };
+        if (val) {
+          entities[key] = val;
+        } else {
+          delete entities[key];
+        }
+        this._updateConfig("entities", entities);
       });
     });
   }

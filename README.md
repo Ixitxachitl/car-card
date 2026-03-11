@@ -40,25 +40,19 @@ A custom Lovelace card that visualizes vehicle data from the [ha-toyota-na](http
 
 ## Configuration
 
-Add the card to a dashboard:
+Add the card to a dashboard. You can use the visual editor or YAML. Each sensor is mapped individually via the `entities` key — pick only the ones you have.
 
 ```yaml
 type: custom:toyota-car-card
 title: My Toyota
-entity_prefix: "2024_camry"
+entities:
+  fuel_level: sensor.fuel_level_2024_camry
+  odometer: sensor.odometer_2024_camry
+  front_driver_tire: sensor.front_driver_tire_2024_camry
+  front_passenger_tire: sensor.front_passenger_tire_2024_camry
+  rear_driver_tire: sensor.rear_driver_tire_2024_camry
+  rear_passenger_tire: sensor.rear_passenger_tire_2024_camry
 ```
-
-### Finding your `entity_prefix`
-
-The prefix is the suffix shared by all your Toyota sensor entities. For example, if your entities look like:
-
-- `sensor.fuel_level_2024_camry`
-- `sensor.odometer_2024_camry`
-- `sensor.front_driver_tire_2024_camry`
-
-Then your `entity_prefix` is `2024_camry`.
-
-You can find this in **Settings → Devices & Services → Toyota → Entities**.
 
 ### Full Options
 
@@ -66,7 +60,7 @@ You can find this in **Settings → Devices & Services → Toyota → Entities**
 |-----------------|---------|----------|------------------------------------------------|
 | `type`          | string  | required | Must be `custom:toyota-car-card`               |
 | `title`         | string  | `Toyota` | Card title                                     |
-| `entity_prefix` | string  | required | Entity suffix (e.g. `2024_camry`)              |
+| `entities`      | object  | required | Map of sensor keys to entity IDs (see below)   |
 | `image_url`     | string  | —        | Custom car image (`/local/car.png` or `https://...`) |
 | `show_fuel`     | boolean | `true`   | Show fuel level bar                            |
 | `show_odometer` | boolean | `true`   | Show odometer chip                             |
@@ -78,12 +72,46 @@ You can find this in **Settings → Devices & Services → Toyota → Entities**
 | `show_speed`    | boolean | `false`  | Show current speed                             |
 | `show_service`  | boolean | `false`  | Show distance to next service                  |
 
+### Entity Keys
+
+Each key below can be mapped to any entity in your Home Assistant instance under `entities:`.
+
+| Key | Expected Domain | Description |
+|-----|----------------|-------------|
+| `fuel_level` | sensor | Fuel level (%) |
+| `distance_to_empty` | sensor | Distance to empty |
+| `odometer` | sensor | Odometer reading |
+| `speed` | sensor | Current speed |
+| `next_service` | sensor | Distance to next service |
+| `last_update_timestamp` | sensor | Last data update timestamp |
+| `front_driver_tire` | sensor | Front driver tire pressure |
+| `front_passenger_tire` | sensor | Front passenger tire pressure |
+| `rear_driver_tire` | sensor | Rear driver tire pressure |
+| `rear_passenger_tire` | sensor | Rear passenger tire pressure |
+| `ev_battery_level` | sensor | EV battery level (%) |
+| `ev_range` | sensor | EV range |
+| `front_driver_door` | binary_sensor | Front driver door open/closed |
+| `front_passenger_door` | binary_sensor | Front passenger door |
+| `rear_driver_door` | binary_sensor | Rear driver door |
+| `rear_passenger_door` | binary_sensor | Rear passenger door |
+| `hood` | binary_sensor | Hood open/closed |
+| `trunk` | binary_sensor | Trunk open/closed |
+| `front_driver_window` | binary_sensor | Front driver window |
+| `front_passenger_window` | binary_sensor | Front passenger window |
+| `rear_driver_window` | binary_sensor | Rear driver window |
+| `rear_passenger_window` | binary_sensor | Rear passenger window |
+| `moonroof` | binary_sensor | Moonroof open/closed |
+| `front_driver_door_lock` | binary_sensor | Front driver door lock |
+| `front_passenger_door_lock` | binary_sensor | Front passenger door lock |
+| `rear_driver_door_lock` | binary_sensor | Rear driver door lock |
+| `rear_passenger_door_lock` | binary_sensor | Rear passenger door lock |
+| `trunk_door_lock` | binary_sensor | Trunk lock |
+
 ### Example: Full Config
 
 ```yaml
 type: custom:toyota-car-card
 title: 2024 Camry
-entity_prefix: "2024_camry"
 image_url: "/local/images/camry.png"
 show_fuel: true
 show_odometer: true
@@ -91,9 +119,30 @@ show_tires: true
 show_doors: true
 show_windows: true
 show_locks: true
-show_ev: false
 show_speed: true
 show_service: true
+entities:
+  fuel_level: sensor.fuel_level_2024_camry
+  distance_to_empty: sensor.distance_to_empty_2024_camry
+  odometer: sensor.odometer_2024_camry
+  speed: sensor.speed_2024_camry
+  next_service: sensor.next_service_2024_camry
+  last_update_timestamp: sensor.last_update_timestamp_2024_camry
+  front_driver_tire: sensor.front_driver_tire_2024_camry
+  front_passenger_tire: sensor.front_passenger_tire_2024_camry
+  rear_driver_tire: sensor.rear_driver_tire_2024_camry
+  rear_passenger_tire: sensor.rear_passenger_tire_2024_camry
+  front_driver_door: binary_sensor.front_driver_door_2024_camry
+  front_passenger_door: binary_sensor.front_passenger_door_2024_camry
+  rear_driver_door: binary_sensor.rear_driver_door_2024_camry
+  rear_passenger_door: binary_sensor.rear_passenger_door_2024_camry
+  hood: binary_sensor.hood_2024_camry
+  trunk: binary_sensor.trunk_2024_camry
+  front_driver_door_lock: binary_sensor.front_driver_door_lock_2024_camry
+  front_passenger_door_lock: binary_sensor.front_passenger_door_lock_2024_camry
+  rear_driver_door_lock: binary_sensor.rear_driver_door_lock_2024_camry
+  rear_passenger_door_lock: binary_sensor.rear_passenger_door_lock_2024_camry
+  trunk_door_lock: binary_sensor.trunk_door_lock_2024_camry
 ```
 
 ### Example: EV / Hybrid
@@ -101,35 +150,14 @@ show_service: true
 ```yaml
 type: custom:toyota-car-card
 title: 2024 RAV4 Prime
-entity_prefix: "2024_rav4_prime"
 show_ev: true
 show_fuel: true
+entities:
+  fuel_level: sensor.fuel_level_2024_rav4_prime
+  ev_battery_level: sensor.ev_battery_level_2024_rav4_prime
+  ev_range: sensor.ev_range_2024_rav4_prime
+  odometer: sensor.odometer_2024_rav4_prime
 ```
-
-## Sensors Used
-
-This card reads the following entities from the ha-toyota-na integration:
-
-| Sensor | Entity Pattern |
-|--------|---------------|
-| Fuel Level | `sensor.fuel_level_{prefix}` |
-| Distance to Empty | `sensor.distance_to_empty_{prefix}` |
-| Odometer | `sensor.odometer_{prefix}` |
-| Speed | `sensor.speed_{prefix}` |
-| Next Service | `sensor.next_service_{prefix}` |
-| Last Update | `sensor.last_update_timestamp_{prefix}` |
-| Front Driver Tire | `sensor.front_driver_tire_{prefix}` |
-| Front Passenger Tire | `sensor.front_passenger_tire_{prefix}` |
-| Rear Driver Tire | `sensor.rear_driver_tire_{prefix}` |
-| Rear Passenger Tire | `sensor.rear_passenger_tire_{prefix}` |
-| EV Battery Level | `sensor.ev_battery_level_{prefix}` |
-| EV Range | `sensor.ev_range_{prefix}` |
-| Doors (FL,FR,RL,RR) | `binary_sensor.{position}_door_{prefix}` |
-| Windows (FL,FR,RL,RR) | `binary_sensor.{position}_window_{prefix}` |
-| Door Locks | `binary_sensor.{position}_door_lock_{prefix}` |
-| Hood | `binary_sensor.hood_{prefix}` |
-| Trunk | `binary_sensor.trunk_{prefix}` |
-| Moonroof | `binary_sensor.moonroof_{prefix}` |
 
 ## License
 
