@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.12.1";
+const CARD_VERSION = "1.12.2";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1490,6 +1490,7 @@ class ToyotaCarCard extends HTMLElement {
         <ha-card>
           <style>
           :host {
+            display: block;
             --ccc-ok: #4caf50;
             --ccc-warning: #ff9800;
             --ccc-critical: #f44336;
@@ -1497,6 +1498,7 @@ class ToyotaCarCard extends HTMLElement {
           ha-card {
             padding: 16px;
             overflow: visible;
+            height: auto !important;
           }
           .header {
             display: flex;
@@ -1960,25 +1962,27 @@ class ToyotaCarCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { ...config };
     if (!this._config.entities) this._config.entities = {};
-    if (this._hass) this._buildEditor();
+    this._rendered = false;
+    if (this._hass) this._ensureAndRender();
   }
 
   set hass(hass) {
     this._hass = hass;
     for (const p of this._pickers) p.hass = hass;
-    if (this._config && !this._rendered) this._buildEditor();
+    if (this._config && !this._rendered) this._ensureAndRender();
   }
 
-  async _buildEditor() {
+  async _ensureAndRender() {
     if (!this._hass || !this._config) return;
-    if (!customElements.get("ha-entity-picker")) {
-      const helpers = await (window.loadCardHelpers ? window.loadCardHelpers() : undefined);
-      if (helpers) {
-        const t = await helpers.createCardElement({ type: "entities", entities: [] });
-        if (t) t.constructor;
+    try {
+      if (!customElements.get("ha-entity-picker")) {
+        const helpers = await (window.loadCardHelpers ? window.loadCardHelpers() : undefined);
+        if (helpers) {
+          const el = await helpers.createCardElement({ type: "entities", entities: [] });
+          if (el && el.constructor) { /* force load */ }
+        }
       }
-      await customElements.whenDefined("ha-entity-picker").catch(() => {});
-    }
+    } catch (e) { /* proceed without waiting */ }
     this._pickers = [];
     this._render();
   }
