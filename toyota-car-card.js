@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.2";
+const CARD_VERSION = "1.10.3";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1161,6 +1161,11 @@ class ToyotaCarCard extends HTMLElement {
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
+    // Force full rebuild when config changes
+    const card = this.shadowRoot.querySelector("ha-card");
+    if (card) card.remove();
+    this._mapCard = null;
+    this._mapCardLoading = false;
     this._render();
   }
 
@@ -1372,32 +1377,14 @@ class ToyotaCarCard extends HTMLElement {
       ${overlays}
     </div>`;
 
-    // Location map section – supports current location and last parked
-    let mapSection = "";
+    // Gather location tracker IDs for the map section
     let mapTrackerIds = [];
     if (this._config.show_map !== false) {
-      const curLoc = currentLocationId ? this._getState(currentLocationId) : null;
-      const parkedLoc = lastParkedId ? this._getState(lastParkedId) : null;
-
-      if (curLoc || parkedLoc) {
-        // Build location status line
-        let locLabels = "";
-        if (curLoc) {
-          locLabels += `<span><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(curLoc.state || "Current")}</span>`;
-          mapTrackerIds.push(currentLocationId);
-        }
-        if (parkedLoc) {
-          locLabels += `<span><ha-icon icon="mdi:parking" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(parkedLoc.state || "Last Parked")}</span>`;
-          mapTrackerIds.push(lastParkedId);
-        }
-
-        mapSection = `<div class="map-section">
-          <div class="map-header">
-            <ha-icon icon="mdi:map-marker" style="--mdc-icon-size: 18px;"></ha-icon>
-            <div class="map-labels">${locLabels}</div>
-          </div>
-          <div class="map-wrap" id="map-container"></div>
-        </div>`;
+      if (currentLocationId && this._getState(currentLocationId)) {
+        mapTrackerIds.push(currentLocationId);
+      }
+      if (lastParkedId && this._getState(lastParkedId)) {
+        mapTrackerIds.push(lastParkedId);
       }
     }
 
@@ -1489,9 +1476,11 @@ class ToyotaCarCard extends HTMLElement {
            </div>`
         : "";
 
-    this.shadowRoot.innerHTML = `
-      <ha-card>
-        <style>
+    // One-time: create persistent card structure (CSS + map container never destroyed)
+    if (!this.shadowRoot.querySelector("ha-card")) {
+      this.shadowRoot.innerHTML = `
+        <ha-card>
+          <style>
           :host {
             --ccc-ok: #4caf50;
             --ccc-warning: #ff9800;
@@ -1743,35 +1732,65 @@ class ToyotaCarCard extends HTMLElement {
             background: var(--ccc-critical, #f44336);
             color: #fff;
           }
-        </style>
+          </style>
+            <div id="card-content"></div>
+            <div id="card-map"></div>
+          </ha-card>
+        `;
+    }
 
-        <div class="header">
-          <span class="title">${this._escapeHtml(this._config.title)}</span>
-          ${lastUpdate ? `<span class="last-update">Updated: ${this._formatTimestamp(lastUpdate)}</span>` : ""}
-        </div>
+    // Update dynamic content (everything except persistent map embed)
+    this.shadowRoot.getElementById("card-content").innerHTML = `
+      <div class="header">
+        <span class="title">${this._escapeHtml(this._config.title)}</span>
+        ${lastUpdate ? `<span class="last-update">Updated: ${this._formatTimestamp(lastUpdate)}</span>` : ""}
+      </div>
 
-        ${imageSection}
-        ${fuelSection}
-        ${evSection}
+      ${imageSection}
+      ${fuelSection}
+      ${evSection}
 
-        <div class="info-chips">
-          ${odometerSection}
-          ${speedSection}
-          ${serviceSection}
-        </div>
+      <div class="info-chips">
+        ${odometerSection}
+        ${speedSection}
+        ${serviceSection}
+      </div>
 
-        ${buttonsSection}
-        ${mapSection}
-      </ha-card>
+      ${buttonsSection}
     `;
 
-    // Attach map card to the container (persisted across re-renders)
+    // Update persistent map section (map element is never destroyed)
+    const cardMapEl = this.shadowRoot.getElementById("card-map");
     if (mapTrackerIds.length > 0) {
+      // Create map section structure once
+      if (!cardMapEl.querySelector(".map-wrap")) {
+        cardMapEl.innerHTML = `<div class="map-section">
+          <div class="map-header" id="map-header-content"></div>
+          <div class="map-wrap" id="map-container"></div>
+        </div>`;
+      }
+      // Update header labels
+      const headerContent = this.shadowRoot.getElementById("map-header-content");
+      if (headerContent) {
+        let locLabels = "";
+        const curLoc = currentLocationId ? this._getState(currentLocationId) : null;
+        const parkedLoc = lastParkedId ? this._getState(lastParkedId) : null;
+        if (curLoc) {
+          locLabels += `<span><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(curLoc.state || "Current")}</span>`;
+        }
+        if (parkedLoc) {
+          locLabels += `<span><ha-icon icon="mdi:parking" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(parkedLoc.state || "Last Parked")}</span>`;
+        }
+        headerContent.innerHTML = `<ha-icon icon="mdi:map-marker" style="--mdc-icon-size: 18px;"></ha-icon>
+          <div class="map-labels">${locLabels}</div>`;
+      }
+      // Create/update map card (persistent, never recreated)
       const mapContainer = this.shadowRoot.getElementById("map-container");
       if (mapContainer) {
         this._updateMap(mapContainer, mapTrackerIds);
       }
     } else {
+      cardMapEl.innerHTML = "";
       this._mapCard = null;
     }
 
@@ -1826,7 +1845,8 @@ class ToyotaCarCard extends HTMLElement {
       this._mapCard = await helpers.createCardElement({
         type: "map",
         entities: entityIds.map((id) => ({ entity: id })),
-        default_zoom: 15,
+        default_zoom: 14,
+        auto_fit: true,
         hours_to_show: 0,
       });
       this._mapCard.style.height = "200px";
