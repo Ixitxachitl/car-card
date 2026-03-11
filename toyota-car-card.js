@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.1";
+const CARD_VERSION = "1.10.2";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1374,7 +1374,7 @@ class ToyotaCarCard extends HTMLElement {
 
     // Location map section – supports current location and last parked
     let mapSection = "";
-    let mapEntities = [];
+    let mapTrackerIds = [];
     if (this._config.show_map !== false) {
       const curLoc = currentLocationId ? this._getState(currentLocationId) : null;
       const parkedLoc = lastParkedId ? this._getState(lastParkedId) : null;
@@ -1384,11 +1384,11 @@ class ToyotaCarCard extends HTMLElement {
         let locLabels = "";
         if (curLoc) {
           locLabels += `<span><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(curLoc.state || "Current")}</span>`;
-          mapEntities.push({ entity_id: currentLocationId });
+          mapTrackerIds.push(currentLocationId);
         }
         if (parkedLoc) {
           locLabels += `<span><ha-icon icon="mdi:parking" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(parkedLoc.state || "Last Parked")}</span>`;
-          mapEntities.push({ entity_id: lastParkedId });
+          mapTrackerIds.push(lastParkedId);
         }
 
         mapSection = `<div class="map-section">
@@ -1396,7 +1396,7 @@ class ToyotaCarCard extends HTMLElement {
             <ha-icon icon="mdi:map-marker" style="--mdc-icon-size: 18px;"></ha-icon>
             <div class="map-labels">${locLabels}</div>
           </div>
-          <div class="map-wrap"></div>
+          <div class="map-wrap" id="map-container"></div>
         </div>`;
       }
     }
@@ -1698,10 +1698,11 @@ class ToyotaCarCard extends HTMLElement {
             border-radius: 10px;
             overflow: hidden;
             border: 1px solid var(--divider-color, #e0e0e0);
-          }
-          .map-wrap ha-map {
-            display: block;
             height: 200px;
+            position: relative;
+          }
+          .map-wrap > * {
+            height: 100% !important;
           }
 
           /* Action buttons */
@@ -1764,23 +1765,14 @@ class ToyotaCarCard extends HTMLElement {
       </ha-card>
     `;
 
-    // Attach ha-map to the map container (persisted across re-renders)
-    if (mapEntities.length > 0) {
-      const mapWrap = this.shadowRoot.querySelector(".map-wrap");
-      if (mapWrap) {
-        if (!this._mapEl) {
-          this._mapEl = document.createElement("ha-map");
-          this._mapEl.style.height = "200px";
-          this._mapEl.style.display = "block";
-        }
-        this._mapEl.hass = this._hass;
-        this._mapEl.entities = mapEntities;
-        this._mapEl.zoom = 15;
-        this._mapEl.darkMode = !!(this._hass.themes && this._hass.themes.darkMode);
-        mapWrap.appendChild(this._mapEl);
+    // Attach map card to the container (persisted across re-renders)
+    if (mapTrackerIds.length > 0) {
+      const mapContainer = this.shadowRoot.getElementById("map-container");
+      if (mapContainer) {
+        this._updateMap(mapContainer, mapTrackerIds);
       }
     } else {
-      this._mapEl = null;
+      this._mapCard = null;
     }
 
     // Attach button event handlers
@@ -1812,6 +1804,51 @@ class ToyotaCarCard extends HTMLElement {
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  async _updateMap(container, entityIds) {
+    // If map card already exists, just re-attach and update hass
+    if (this._mapCard) {
+      this._mapCard.hass = this._hass;
+      if (!container.contains(this._mapCard)) {
+        container.innerHTML = "";
+        container.appendChild(this._mapCard);
+      }
+      return;
+    }
+
+    // Prevent concurrent creation
+    if (this._mapCardLoading) return;
+    this._mapCardLoading = true;
+
+    try {
+      const helpers = await window.loadCardHelpers();
+      this._mapCard = await helpers.createCardElement({
+        type: "map",
+        entities: entityIds.map((id) => ({ entity: id })),
+        default_zoom: 15,
+        hours_to_show: 0,
+      });
+      this._mapCard.style.height = "200px";
+      this._mapCard.style.display = "block";
+      this._mapCard.style.borderRadius = "0";
+      this._mapCard.style.boxShadow = "none";
+      this._mapCard.style.setProperty("--ha-card-box-shadow", "none");
+      this._mapCard.hass = this._hass;
+
+      // After await, the original container ref may be stale; find the current one
+      const currentContainer =
+        this.shadowRoot.getElementById("map-container");
+      if (currentContainer) {
+        currentContainer.innerHTML = "";
+        currentContainer.appendChild(this._mapCard);
+      }
+    } catch (e) {
+      container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">
+        Map unavailable</div>`;
+    } finally {
+      this._mapCardLoading = false;
+    }
   }
 
   _encodeImageUrl(url) {
