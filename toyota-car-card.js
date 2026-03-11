@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.9.0";
+const CARD_VERSION = "1.10.0";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1155,7 +1155,6 @@ class ToyotaCarCard extends HTMLElement {
       show_map: config.show_map !== false,
       show_buttons: config.show_buttons !== false,
       lock_entity: config.lock_entity || null,
-      engine_start_entity: config.engine_start_entity || null,
       ...config,
     };
 
@@ -1252,8 +1251,9 @@ class ToyotaCarCard extends HTMLElement {
     const evBatteryId = this._getEntityId("sensor", "ev_battery_level");
     const evRangeId = this._getEntityId("sensor", "ev_range");
 
-    // Location entity
-    const locationId = this._config.entities.location || null;
+    // Location entities
+    const currentLocationId = this._config.entities.current_location || null;
+    const lastParkedId = this._config.entities.last_parked_location || null;
 
     // Gather values
     const fuel = this._getStateValue(fuelId);
@@ -1372,19 +1372,33 @@ class ToyotaCarCard extends HTMLElement {
       ${overlays}
     </div>`;
 
-    // Location map section
+    // Location map section – supports current location and last parked
     let mapSection = "";
-    if (this._config.show_map !== false && locationId) {
-      const locState = this._getState(locationId);
-      if (locState) {
-        const lat = locState.attributes.latitude;
-        const lon = locState.attributes.longitude;
-        const locLabel = locState.state || "";
+    if (this._config.show_map !== false) {
+      const curLoc = currentLocationId ? this._getState(currentLocationId) : null;
+      const parkedLoc = lastParkedId ? this._getState(lastParkedId) : null;
+
+      // Use current location if available, fall back to last parked
+      const primaryLoc = curLoc || parkedLoc;
+      if (primaryLoc) {
+        const lat = primaryLoc.attributes.latitude;
+        const lon = primaryLoc.attributes.longitude;
         if (lat && lon) {
+          // Build location status line
+          let locLabels = "";
+          if (curLoc) {
+            locLabels += `<span><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(curLoc.state || "Current")}</span>`;
+          }
+          if (parkedLoc) {
+            const pLat = parkedLoc.attributes.latitude;
+            const pLon = parkedLoc.attributes.longitude;
+            locLabels += `<span><ha-icon icon="mdi:parking" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(parkedLoc.state || "Last Parked")}</span>`;
+          }
+
           mapSection = `<div class="map-section">
             <div class="map-header">
               <ha-icon icon="mdi:map-marker" style="--mdc-icon-size: 18px;"></ha-icon>
-              <span>${this._escapeHtml(locLabel)}</span>
+              <div class="map-labels">${locLabels}</div>
             </div>
             <div class="map-wrap">
               <iframe
@@ -1403,7 +1417,6 @@ class ToyotaCarCard extends HTMLElement {
     let buttonsSection = "";
     if (this._config.show_buttons !== false) {
       const lockEntity = this._config.lock_entity;
-      const engineEntity = this._config.engine_start_entity;
       let buttons = "";
       if (lockEntity) {
         const lockState = this._getState(lockEntity);
@@ -1413,12 +1426,14 @@ class ToyotaCarCard extends HTMLElement {
           <span>${isLocked ? 'Unlock' : 'Lock'} Doors</span>
         </button>`;
       }
-      if (engineEntity) {
-        buttons += `<button class="action-btn" data-action="engine" title="Remote Start">
-          <ha-icon icon="mdi:engine" style="--mdc-icon-size: 20px;"></ha-icon>
-          <span>Remote Start</span>
-        </button>`;
-      }
+      buttons += `<button class="action-btn" data-action="engine_start" title="Remote Start">
+        <ha-icon icon="mdi:engine" style="--mdc-icon-size: 20px;"></ha-icon>
+        <span>Start Engine</span>
+      </button>`;
+      buttons += `<button class="action-btn action-btn-stop" data-action="engine_stop" title="Stop Engine">
+        <ha-icon icon="mdi:engine-off" style="--mdc-icon-size: 20px;"></ha-icon>
+        <span>Stop Engine</span>
+      </button>`;
       if (buttons) {
         buttonsSection = `<div class="actions-row">${buttons}</div>`;
       }
@@ -1679,6 +1694,18 @@ class ToyotaCarCard extends HTMLElement {
             margin-bottom: 8px;
             --mdc-icon-size: 18px;
           }
+          .map-labels {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+          }
+          .map-labels span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.9em;
+          }
           .map-wrap {
             border-radius: 10px;
             overflow: hidden;
@@ -1720,6 +1747,14 @@ class ToyotaCarCard extends HTMLElement {
           .action-btn:active {
             transform: scale(0.97);
           }
+          .action-btn-stop {
+            border-color: var(--ccc-critical, #f44336);
+            color: var(--ccc-critical, #f44336);
+          }
+          .action-btn-stop:hover {
+            background: var(--ccc-critical, #f44336);
+            color: #fff;
+          }
         </style>
 
         <div class="header">
@@ -1755,10 +1790,10 @@ class ToyotaCarCard extends HTMLElement {
               this._hass.callService("lock", service, {
                 entity_id: this._config.lock_entity,
               });
-            } else if (action === "engine" && this._config.engine_start_entity) {
-              this._hass.callService("button", "press", {
-                entity_id: this._config.engine_start_entity,
-              });
+            } else if (action === "engine_start") {
+              this._hass.callService("toyota_na", "engine_start", {});
+            } else if (action === "engine_stop") {
+              this._hass.callService("toyota_na", "engine_stop", {});
             }
           });
         });
@@ -1841,7 +1876,8 @@ const ENTITY_KEYS = [
   { key: "rear_driver_door_lock", label: "Rear Driver Door Lock", section: "Locks", domain: "binary_sensor" },
   { key: "rear_passenger_door_lock", label: "Rear Passenger Door Lock", section: "Locks", domain: "binary_sensor" },
   { key: "trunk_door_lock", label: "Trunk Lock", section: "Locks", domain: "binary_sensor" },
-  { key: "location", label: "Location (Device Tracker)", section: "Location", domain: "device_tracker" },
+  { key: "current_location", label: "Current Location", section: "Location", domain: "device_tracker" },
+  { key: "last_parked_location", label: "Last Parked Location", section: "Location", domain: "device_tracker" },
 ];
 
 // ── Visual card editor ──
@@ -2137,10 +2173,10 @@ class ToyotaCarCardEditor extends HTMLElement {
       (val) => this._updateConfig("lock_entity", val)
     ));
 
-    actSection.appendChild(this._makeEntityPicker(
-      "Remote Start Entity (button domain)", "button", this._config.engine_start_entity || "",
-      (val) => this._updateConfig("engine_start_entity", val)
-    ));
+    const engineHint = document.createElement("div");
+    engineHint.style.cssText = "font-size: 12px; color: var(--secondary-text-color, #727272); margin-top: 4px;";
+    engineHint.textContent = "Engine Start/Stop uses the toyota_na.engine_start and toyota_na.engine_stop actions automatically.";
+    actSection.appendChild(engineHint);
 
     editorRoot.appendChild(actSection);
 
