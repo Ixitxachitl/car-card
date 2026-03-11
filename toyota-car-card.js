@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.8";
+const CARD_VERSION = "1.10.9";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1878,11 +1878,8 @@ class ToyotaCarCard extends HTMLElement {
       attributionControl: false,
     });
 
-    // Use HA's tile proxy which matches the HA map card appearance
-    const tileUrl = window.hassConnection
-      ? "/api/map/tile/{z}/{x}/{y}"
-      : "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    L.tileLayer(tileUrl, {
+    // Use OpenStreetMap tiles
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
     }).addTo(this._leafletMap);
 
