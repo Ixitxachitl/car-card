@@ -1,7 +1,7 @@
 # Toyota Car Card for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/v/release/YOUR_GITHUB_USER/car-card?style=flat-square)](https://github.com/ixitxachitl/car-card/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/ixitxachitl/car-card?style=flat-square)](https://github.com/ixitxachitl/car-card/releases)
 
 A custom Lovelace card that visualizes vehicle data from the [ha-toyota-na](https://github.com/widewing/ha-toyota-na) integration.
 
