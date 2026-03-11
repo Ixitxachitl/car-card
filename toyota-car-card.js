@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.12.5";
+const CARD_VERSION = "1.12.6";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1821,7 +1821,7 @@ class ToyotaCarCard extends HTMLElement {
               const running = engState && engState.state === "on";
               const deviceId = this._config.vehicle;
               if (!deviceId) return;
-              this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", { device_id: deviceId });
+              this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", { vehicle: deviceId });
             }
           });
         });
