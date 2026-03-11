@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.5";
+const CARD_VERSION = "1.10.6";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1155,6 +1155,7 @@ class ToyotaCarCard extends HTMLElement {
       show_map: config.show_map !== false,
       show_buttons: config.show_buttons !== false,
       lock_entity: config.lock_entity || null,
+      engine_status_entity: config.engine_status_entity || null,
       ...config,
     };
 
@@ -1166,6 +1167,7 @@ class ToyotaCarCard extends HTMLElement {
     if (card) card.remove();
     this._mapCard = null;
     this._mapCardLoading = false;
+    this._leafletMap = null;
     this._render();
   }
 
@@ -1401,13 +1403,12 @@ class ToyotaCarCard extends HTMLElement {
           <span>${isLocked ? 'Unlock' : 'Lock'} Doors</span>
         </button>`;
       }
-      buttons += `<button class="action-btn" data-action="engine_start" title="Remote Start">
-        <ha-icon icon="mdi:engine" style="--mdc-icon-size: 20px;"></ha-icon>
-        <span>Start Engine</span>
-      </button>`;
-      buttons += `<button class="action-btn action-btn-stop" data-action="engine_stop" title="Stop Engine">
-        <ha-icon icon="mdi:engine-off" style="--mdc-icon-size: 20px;"></ha-icon>
-        <span>Stop Engine</span>
+      const engineEntity = this._config.engine_status_entity;
+      const engineState = engineEntity ? this._getState(engineEntity) : null;
+      const engineRunning = engineState && engineState.state === "on";
+      buttons += `<button class="action-btn ${engineRunning ? 'action-btn-stop' : ''}" data-action="engine_toggle" title="${engineRunning ? 'Stop' : 'Start'} Engine">
+        <ha-icon icon="mdi:${engineRunning ? 'engine-off' : 'engine'}" style="--mdc-icon-size: 20px;"></ha-icon>
+        <span>${engineRunning ? 'Stop' : 'Start'} Engine</span>
       </button>`;
       if (buttons) {
         buttonsSection = `<div class="actions-row">${buttons}</div>`;
@@ -1692,7 +1693,6 @@ class ToyotaCarCard extends HTMLElement {
           }
           .map-wrap > * {
             height: 100% !important;
-            --ha-card-header-padding: 0;
           }
 
           /* Action buttons */
@@ -1808,10 +1808,11 @@ class ToyotaCarCard extends HTMLElement {
               this._hass.callService("lock", service, {
                 entity_id: this._config.lock_entity,
               });
-            } else if (action === "engine_start") {
-              this._hass.callService("toyota_na", "engine_start", {});
-            } else if (action === "engine_stop") {
-              this._hass.callService("toyota_na", "engine_stop", {});
+            } else if (action === "engine_toggle") {
+              const engEnt = this._config.engine_status_entity;
+              const engState = engEnt ? this._getState(engEnt) : null;
+              const running = engState && engState.state === "on";
+              this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", {});
             }
           });
         });
@@ -1827,76 +1828,74 @@ class ToyotaCarCard extends HTMLElement {
   }
 
   async _updateMap(container, entityIds) {
-    // If map card already exists, just re-attach and update hass
-    if (this._mapCard) {
-      this._mapCard.hass = this._hass;
-      if (!container.contains(this._mapCard)) {
-        container.innerHTML = "";
-        container.appendChild(this._mapCard);
+    // Gather coordinates from device_tracker entities
+    const coords = [];
+    for (const id of entityIds) {
+      const s = this._getState(id);
+      if (s && s.attributes && s.attributes.latitude && s.attributes.longitude) {
+        coords.push({ id, lat: s.attributes.latitude, lng: s.attributes.longitude });
       }
+    }
+    if (coords.length === 0) {
+      container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">No location data</div>`;
       return;
     }
 
-    // Prevent concurrent creation
-    if (this._mapCardLoading) return;
-    this._mapCardLoading = true;
-
-    try {
-      const helpers = await window.loadCardHelpers();
-      this._mapCard = await helpers.createCardElement({
-        type: "map",
-        entities: entityIds.map((id) => ({ entity: id })),
-        default_zoom: 15,
-        hours_to_show: 0,
-      });
-      this._mapCard.style.height = "300px";
-      this._mapCard.style.display = "block";
-      this._mapCard.style.borderRadius = "0";
-      this._mapCard.style.boxShadow = "none";
-      this._mapCard.style.setProperty("--ha-card-box-shadow", "none");
-      this._mapCard.style.setProperty("--ha-card-border-radius", "0");
-      this._mapCard.hass = this._hass;
-
-      // After await, the original container ref may be stale; find the current one
-      const currentContainer =
-        this.shadowRoot.getElementById("map-container");
-      if (currentContainer) {
-        currentContainer.innerHTML = "";
-        currentContainer.appendChild(this._mapCard);
-        // Force Leaflet to recalculate size so markers center correctly
-        this._invalidateMapSize();
-      }
-    } catch (e) {
-      container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">
-        Map unavailable</div>`;
-    } finally {
-      this._mapCardLoading = false;
+    // If Leaflet map already exists, just update markers and view
+    if (this._leafletMap) {
+      this._updateMapMarkers(coords);
+      return;
     }
+
+    // Wait for Leaflet to be available (HA loads it)
+    if (!window.L) {
+      container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">Map loading...</div>`;
+      setTimeout(() => this._updateMap(container, entityIds), 1000);
+      return;
+    }
+
+    // Create Leaflet map
+    container.innerHTML = "";
+    const mapDiv = document.createElement("div");
+    mapDiv.style.width = "100%";
+    mapDiv.style.height = "100%";
+    container.appendChild(mapDiv);
+
+    const center = coords[0];
+    this._leafletMap = L.map(mapDiv, {
+      center: [center.lat, center.lng],
+      zoom: 15,
+      zoomControl: false,
+      attributionControl: false,
+    });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+    }).addTo(this._leafletMap);
+
+    this._mapMarkers = [];
+    this._updateMapMarkers(coords);
+
+    // Invalidate size after layout settles
+    setTimeout(() => {
+      if (this._leafletMap) this._leafletMap.invalidateSize();
+    }, 300);
   }
 
-  _invalidateMapSize() {
-    // The hui-map-card renders ha-map inside its shadow DOM.
-    // Leaflet needs invalidateSize() after the container is in the DOM
-    // so it calculates the correct center. Also strip internal padding.
-    setTimeout(() => {
-      if (!this._mapCard) return;
-      const root1 = this._mapCard.shadowRoot;
-      if (!root1) return;
-      // Remove padding from the map card's inner ha-card
-      const innerCard = root1.querySelector("ha-card");
-      if (innerCard) {
-        innerCard.style.padding = "0";
-        innerCard.style.overflow = "hidden";
-      }
-      // Find ha-map, then its shadow root contains the Leaflet map
-      const haMap = root1.querySelector("ha-map");
-      if (haMap && haMap.shadowRoot) {
-        const leafletEl = haMap.shadowRoot.getElementById("map");
-        if (leafletEl && leafletEl._leaflet_map) {
-          leafletEl._leaflet_map.invalidateSize();
-        }
-      }
-    }, 500);
+  _updateMapMarkers(coords) {
+    if (!this._leafletMap) return;
+    // Remove old markers
+    if (this._mapMarkers) {
+      this._mapMarkers.forEach((m) => m.remove());
+    }
+    this._mapMarkers = [];
+    for (const c of coords) {
+      const marker = L.marker([c.lat, c.lng]).addTo(this._leafletMap);
+      this._mapMarkers.push(marker);
+    }
+    // Center on first marker
+    if (coords.length > 0) {
+      this._leafletMap.setView([coords[0].lat, coords[0].lng], this._leafletMap.getZoom());
+    }
   }
 
   _encodeImageUrl(url) {
@@ -1969,6 +1968,7 @@ const ENTITY_KEYS = [
   { key: "trunk_door_lock", label: "Trunk Lock", section: "Locks", domain: "binary_sensor" },
   { key: "current_location", label: "Current Location", section: "Location", domain: "device_tracker" },
   { key: "last_parked_location", label: "Last Parked Location", section: "Location", domain: "device_tracker" },
+  { key: "engine_status", label: "Engine Status (Remote Start)", section: "General", domain: "sensor" },
 ];
 
 // ── Visual card editor ──
@@ -2264,9 +2264,14 @@ class ToyotaCarCardEditor extends HTMLElement {
       (val) => this._updateConfig("lock_entity", val)
     ));
 
+    actSection.appendChild(this._makeEntityPicker(
+      "Engine Status Entity (sensor)", "sensor", this._config.engine_status_entity || "",
+      (val) => this._updateConfig("engine_status_entity", val)
+    ));
+
     const engineHint = document.createElement("div");
     engineHint.style.cssText = "font-size: 12px; color: var(--secondary-text-color, #727272); margin-top: 4px;";
-    engineHint.textContent = "Engine Start/Stop uses the toyota_na.engine_start and toyota_na.engine_stop actions automatically.";
+    engineHint.textContent = "Engine button toggles between toyota_na.engine_start and toyota_na.engine_stop based on the status entity.";
     actSection.appendChild(engineHint);
 
     editorRoot.appendChild(actSection);
