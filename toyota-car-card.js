@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.8.0";
+const CARD_VERSION = "1.9.0";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1152,6 +1152,10 @@ class ToyotaCarCard extends HTMLElement {
       show_ev: config.show_ev || false,
       show_speed: config.show_speed || false,
       show_service: config.show_service || false,
+      show_map: config.show_map !== false,
+      show_buttons: config.show_buttons !== false,
+      lock_entity: config.lock_entity || null,
+      engine_start_entity: config.engine_start_entity || null,
       ...config,
     };
 
@@ -1248,6 +1252,9 @@ class ToyotaCarCard extends HTMLElement {
     const evBatteryId = this._getEntityId("sensor", "ev_battery_level");
     const evRangeId = this._getEntityId("sensor", "ev_range");
 
+    // Location entity
+    const locationId = this._config.entities.location || null;
+
     // Gather values
     const fuel = this._getStateValue(fuelId);
     const odometer = this._getStateValue(odometerId);
@@ -1274,40 +1281,6 @@ class ToyotaCarCard extends HTMLElement {
     const evRangeUnit =
       this._getState(evRangeId)?.attributes?.unit_of_measurement || "mi";
 
-    // Door, window, lock states – "on" = open/unlocked, "off" = closed/locked
-    const doors = [
-      { name: "FL Door", state: this._getStateValue(doorFL) },
-      { name: "FR Door", state: this._getStateValue(doorFR) },
-      { name: "RL Door", state: this._getStateValue(doorRL) },
-      { name: "RR Door", state: this._getStateValue(doorRR) },
-      { name: "Hood", state: this._getStateValue(hoodId) },
-      { name: "Trunk", state: this._getStateValue(trunkId) },
-    ];
-
-    const windows = [
-      { name: "FL Win", state: this._getStateValue(winFL) },
-      { name: "FR Win", state: this._getStateValue(winFR) },
-      { name: "RL Win", state: this._getStateValue(winRL) },
-      { name: "RR Win", state: this._getStateValue(winRR) },
-      { name: "Moonroof", state: this._getStateValue(moonroof) },
-    ];
-
-    const locks = [
-      { name: "FL", state: this._getStateValue(lockFL) },
-      { name: "FR", state: this._getStateValue(lockFR) },
-      { name: "RL", state: this._getStateValue(lockRL) },
-      { name: "RR", state: this._getStateValue(lockRR) },
-      { name: "Trunk", state: this._getStateValue(lockTrunk) },
-    ];
-
-    const allLocked = locks.every((l) => l.state === "off" || l.state === null);
-    const allDoorsClosed = doors.every(
-      (d) => d.state === "off" || d.state === null
-    );
-    const allWindowsClosed = windows.every(
-      (w) => w.state === "off" || w.state === null
-    );
-
     // Fuel bar color
     const fuelNum = parseFloat(fuel);
     let fuelColor = "var(--ccc-ok, #4caf50)";
@@ -1331,157 +1304,125 @@ class ToyotaCarCard extends HTMLElement {
       ? `<img src="${this._encodeImageUrl(this._config.image_url)}" alt="Vehicle" />`
       : TRUCK_SVG;
 
-    // Build indicator columns flanking the vehicle image
-    const statusDot = (isAlert) =>
-      `<span class="vi-dot ${isAlert ? "alert" : "ok"}"></span>`;
-
-    const makeIndicator = (state, label, icon, shortLabel) => {
+    // Build overlay indicators positioned on the SVG
+    const makeOverlay = (state, label, icon, cssClass, openText = "Open", closedText = "Closed") => {
       if (state === null) return "";
       const isAlert = state === "on";
       const color = isAlert ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-      return `<div class="vi" style="--vi-color: ${color};" title="${label}: ${isAlert ? 'Open' : 'Closed'}">
-        ${statusDot(isAlert)}
-        <ha-icon icon="${icon}" style="--mdc-icon-size: 16px; color: ${color};"></ha-icon>
-        <span class="vi-label">${shortLabel}</span>
+      return `<div class="ov ${cssClass}" title="${label}: ${isAlert ? openText : closedText}">
+        <ha-icon icon="${icon}" style="--mdc-icon-size: 18px; color: ${color};"></ha-icon>
+        <span class="ov-label" style="color: ${color};">${label}</span>
       </div>`;
     };
 
-    const makeLockIndicator = (state, label, shortLabel) => {
-      if (state === null) return "";
-      const isUnlocked = state === "on";
-      const color = isUnlocked ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-      const icon = isUnlocked ? "mdi:lock-open-variant" : "mdi:lock";
-      return `<div class="vi" style="--vi-color: ${color};" title="${label}: ${isUnlocked ? 'Unlocked' : 'Locked'}">
-        ${statusDot(isUnlocked)}
-        <ha-icon icon="${icon}" style="--mdc-icon-size: 16px; color: ${color};"></ha-icon>
-        <span class="vi-label">${shortLabel}</span>
-      </div>`;
-    };
-
-    const makeTireIndicator = (val, label, shortLabel) => {
+    const makeTireOverlay = (val, label, cssClass) => {
       if (val === null) return "";
       const color = tireColor(val);
-      return `<div class="vi" style="--vi-color: ${color};" title="${label}: ${val} ${tireUnit}">
-        <span class="vi-tire-val" style="color: ${color};">${this._formatNumber(val)}</span>
-        <span class="vi-label">${shortLabel}</span>
+      return `<div class="ov ${cssClass}" title="${label}: ${val} ${tireUnit}">
+        <span class="ov-tire" style="color: ${color};">${this._formatNumber(val)}</span>
+        <span class="ov-label" style="color: ${color};">${tireUnit}</span>
       </div>`;
     };
 
-    // Left column = Driver side, Right column = Passenger side
-    let leftInds = "";
-    let rightInds = "";
+    let overlays = "";
 
-    // --- Front section ---
-    leftInds += '<div class="vi-group"><span class="vi-group-title">Front</span>';
-    rightInds += '<div class="vi-group"><span class="vi-group-title">Front</span>';
-
+    // Tire overlays – at wheel positions
     if (this._config.show_tires !== false) {
-      leftInds += makeTireIndicator(flTire, "Front Driver Tire", "Tire");
-      rightInds += makeTireIndicator(frTire, "Front Passenger Tire", "Tire");
+      overlays += makeTireOverlay(flTire, "Front Driver Tire", "ov-tire-fl");
+      overlays += makeTireOverlay(frTire, "Front Passenger Tire", "ov-tire-fr");
+      overlays += makeTireOverlay(rlTire, "Rear Driver Tire", "ov-tire-rl");
+      overlays += makeTireOverlay(rrTire, "Rear Passenger Tire", "ov-tire-rr");
     }
+
+    // Door overlays – on the door areas
     if (this._config.show_doors !== false) {
-      leftInds += makeIndicator(this._getStateValue(doorFL), "Front Driver Door", "mdi:car-door", "Door");
-      rightInds += makeIndicator(this._getStateValue(doorFR), "Front Passenger Door", "mdi:car-door", "Door");
+      overlays += makeOverlay(this._getStateValue(doorFL), "Door", "mdi:car-door", "ov-door-fl");
+      overlays += makeOverlay(this._getStateValue(doorFR), "Door", "mdi:car-door", "ov-door-fr");
+      overlays += makeOverlay(this._getStateValue(doorRL), "Door", "mdi:car-door", "ov-door-rl");
+      overlays += makeOverlay(this._getStateValue(doorRR), "Door", "mdi:car-door", "ov-door-rr");
+      overlays += makeOverlay(this._getStateValue(hoodId), "Hood", "mdi:car-back", "ov-hood");
+      overlays += makeOverlay(this._getStateValue(trunkId), "Trunk", "mdi:car-back", "ov-trunk");
     }
+
+    // Window overlays – on the window areas
     if (this._config.show_windows !== false) {
-      leftInds += makeIndicator(this._getStateValue(winFL), "Front Driver Window", "mdi:car-windshield-outline", "Window");
-      rightInds += makeIndicator(this._getStateValue(winFR), "Front Passenger Window", "mdi:car-windshield-outline", "Window");
+      overlays += makeOverlay(this._getStateValue(winFL), "Window", "mdi:car-windshield-outline", "ov-win-fl");
+      overlays += makeOverlay(this._getStateValue(winFR), "Window", "mdi:car-windshield-outline", "ov-win-fr");
+      overlays += makeOverlay(this._getStateValue(winRL), "Window", "mdi:car-windshield-outline", "ov-win-rl");
+      overlays += makeOverlay(this._getStateValue(winRR), "Window", "mdi:car-windshield-outline", "ov-win-rr");
+      overlays += makeOverlay(this._getStateValue(moonroof), "Moonroof", "mdi:car-select", "ov-moonroof");
     }
+
+    // Lock overlays – near the door handles
     if (this._config.show_locks !== false) {
-      leftInds += makeLockIndicator(this._getStateValue(lockFL), "Front Driver Lock", "Lock");
-      rightInds += makeLockIndicator(this._getStateValue(lockFR), "Front Passenger Lock", "Lock");
-    }
-    leftInds += '</div>';
-    rightInds += '</div>';
-
-    // --- Rear section ---
-    leftInds += '<div class="vi-group"><span class="vi-group-title">Rear</span>';
-    rightInds += '<div class="vi-group"><span class="vi-group-title">Rear</span>';
-
-    if (this._config.show_tires !== false) {
-      leftInds += makeTireIndicator(rlTire, "Rear Driver Tire", "Tire");
-      rightInds += makeTireIndicator(rrTire, "Rear Passenger Tire", "Tire");
-    }
-    if (this._config.show_doors !== false) {
-      leftInds += makeIndicator(this._getStateValue(doorRL), "Rear Driver Door", "mdi:car-door", "Door");
-      rightInds += makeIndicator(this._getStateValue(doorRR), "Rear Passenger Door", "mdi:car-door", "Door");
-    }
-    if (this._config.show_windows !== false) {
-      leftInds += makeIndicator(this._getStateValue(winRL), "Rear Driver Window", "mdi:car-windshield-outline", "Window");
-      rightInds += makeIndicator(this._getStateValue(winRR), "Rear Passenger Window", "mdi:car-windshield-outline", "Window");
-    }
-    if (this._config.show_locks !== false) {
-      leftInds += makeLockIndicator(this._getStateValue(lockRL), "Rear Driver Lock", "Lock");
-      rightInds += makeLockIndicator(this._getStateValue(lockRR), "Rear Passenger Lock", "Lock");
-    }
-    leftInds += '</div>';
-    rightInds += '</div>';
-
-    // Center indicators (hood, trunk, moonroof)
-    let topCenter = "";
-    let bottomCenter = "";
-
-    if (this._config.show_doors !== false) {
-      const hoodState = this._getStateValue(hoodId);
-      if (hoodState !== null) {
-        const hoodOpen = hoodState === "on";
-        const hoodColor = hoodOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-        topCenter += `<div class="vi vi-horiz" style="--vi-color: ${hoodColor};" title="Hood: ${hoodOpen ? 'Open' : 'Closed'}">
-          ${statusDot(hoodOpen)}
-          <ha-icon icon="mdi:car-back" style="--mdc-icon-size: 16px; color: ${hoodColor};"></ha-icon>
-          <span class="vi-label">Hood</span>
-        </div>`;
-      }
+      const lfl = this._getStateValue(lockFL);
+      const lfr = this._getStateValue(lockFR);
+      const lrl = this._getStateValue(lockRL);
+      const lrr = this._getStateValue(lockRR);
+      const ltr = this._getStateValue(lockTrunk);
+      overlays += makeOverlay(lfl, "Lock", lfl === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-fl", "Unlocked", "Locked");
+      overlays += makeOverlay(lfr, "Lock", lfr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-fr", "Unlocked", "Locked");
+      overlays += makeOverlay(lrl, "Lock", lrl === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-rl", "Unlocked", "Locked");
+      overlays += makeOverlay(lrr, "Lock", lrr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-rr", "Unlocked", "Locked");
+      overlays += makeOverlay(ltr, "Trunk Lock", ltr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-trunk", "Unlocked", "Locked");
     }
 
-    if (this._config.show_windows !== false) {
-      const moonState = this._getStateValue(moonroof);
-      if (moonState !== null) {
-        const moonOpen = moonState === "on";
-        const moonColor = moonOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-        topCenter += `<div class="vi vi-horiz" style="--vi-color: ${moonColor};" title="Moonroof: ${moonOpen ? 'Open' : 'Closed'}">
-          ${statusDot(moonOpen)}
-          <ha-icon icon="mdi:car-select" style="--mdc-icon-size: 16px; color: ${moonColor};"></ha-icon>
-          <span class="vi-label">Moonroof</span>
-        </div>`;
-      }
-    }
-
-    if (this._config.show_doors !== false) {
-      const trunkState = this._getStateValue(trunkId);
-      if (trunkState !== null) {
-        const trunkOpen = trunkState === "on";
-        const trunkColor = trunkOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-        bottomCenter += `<div class="vi vi-horiz" style="--vi-color: ${trunkColor};" title="Trunk: ${trunkOpen ? 'Open' : 'Closed'}">
-          ${statusDot(trunkOpen)}
-          <ha-icon icon="mdi:car-back" style="--mdc-icon-size: 16px; color: ${trunkColor}; transform: rotate(180deg);"></ha-icon>
-          <span class="vi-label">Trunk</span>
-        </div>`;
-      }
-    }
-
-    if (this._config.show_locks !== false) {
-      const trunkLockState = this._getStateValue(lockTrunk);
-      if (trunkLockState !== null) {
-        const trunkLocked = trunkLockState !== "on";
-        const tlColor = trunkLocked ? "var(--ccc-ok, #4caf50)" : "var(--ccc-warning, #ff9800)";
-        bottomCenter += `<div class="vi vi-horiz" style="--vi-color: ${tlColor};" title="Trunk Lock: ${trunkLocked ? 'Locked' : 'Unlocked'}">
-          ${statusDot(!trunkLocked)}
-          <ha-icon icon="${trunkLocked ? 'mdi:lock' : 'mdi:lock-open-variant'}" style="--mdc-icon-size: 16px; color: ${tlColor};"></ha-icon>
-          <span class="vi-label">Trunk Lock</span>
-        </div>`;
-      }
-    }
-
-    const imageSection = `<div class="vehicle-layout">
-      <div class="vi-column vi-left">${leftInds}</div>
-      <div class="vi-center-col">
-        ${topCenter ? `<div class="vi-center-row">${topCenter}</div>` : ""}
-        <div class="car-image">${vehicleImg}</div>
-        ${bottomCenter ? `<div class="vi-center-row">${bottomCenter}</div>` : ""}
-      </div>
-      <div class="vi-column vi-right">${rightInds}</div>
+    const imageSection = `<div class="car-image-container">
+      <div class="car-image">${vehicleImg}</div>
+      ${overlays}
     </div>`;
+
+    // Location map section
+    let mapSection = "";
+    if (this._config.show_map !== false && locationId) {
+      const locState = this._getState(locationId);
+      if (locState) {
+        const lat = locState.attributes.latitude;
+        const lon = locState.attributes.longitude;
+        const locLabel = locState.state || "";
+        if (lat && lon) {
+          mapSection = `<div class="map-section">
+            <div class="map-header">
+              <ha-icon icon="mdi:map-marker" style="--mdc-icon-size: 18px;"></ha-icon>
+              <span>${this._escapeHtml(locLabel)}</span>
+            </div>
+            <div class="map-wrap">
+              <iframe
+                src="https://www.openstreetmap.org/export/embed.html?bbox=${lon-0.005},${lat-0.004},${lon+0.005},${lat+0.004}&layer=mapnik&marker=${lat},${lon}"
+                frameborder="0"
+                scrolling="no"
+                allowfullscreen
+              ></iframe>
+            </div>
+          </div>`;
+        }
+      }
+    }
+
+    // Action buttons section
+    let buttonsSection = "";
+    if (this._config.show_buttons !== false) {
+      const lockEntity = this._config.lock_entity;
+      const engineEntity = this._config.engine_start_entity;
+      let buttons = "";
+      if (lockEntity) {
+        const lockState = this._getState(lockEntity);
+        const isLocked = lockState && lockState.state === "locked";
+        buttons += `<button class="action-btn" data-action="lock" title="${isLocked ? 'Unlock' : 'Lock'} Doors">
+          <ha-icon icon="mdi:${isLocked ? 'lock' : 'lock-open-variant'}" style="--mdc-icon-size: 20px;"></ha-icon>
+          <span>${isLocked ? 'Unlock' : 'Lock'} Doors</span>
+        </button>`;
+      }
+      if (engineEntity) {
+        buttons += `<button class="action-btn" data-action="engine" title="Remote Start">
+          <ha-icon icon="mdi:engine" style="--mdc-icon-size: 20px;"></ha-icon>
+          <span>Remote Start</span>
+        </button>`;
+      }
+      if (buttons) {
+        buttonsSection = `<div class="actions-row">${buttons}</div>`;
+      }
+    }
 
     const fuelSection =
       this._config.show_fuel && fuel !== null
@@ -1542,74 +1483,6 @@ class ToyotaCarCard extends HTMLElement {
         ? `<div class="info-chip">
              <ha-icon icon="mdi:wrench-clock"></ha-icon>
              <span>${this._formatNumber(nextService)} ${this._escapeHtml(odometerUnit)}</span>
-           </div>`
-        : "";
-
-    const tireSection = "";
-
-    const doorSection =
-      this._config.show_doors
-        ? `<div class="status-group">
-             <div class="status-header">
-               <ha-icon icon="mdi:car-door"></ha-icon>
-               <span>Doors</span>
-               <span class="status-badge ${allDoorsClosed ? "ok" : "warn"}">${allDoorsClosed ? "All Closed" : "Open"}</span>
-             </div>
-             ${
-               !allDoorsClosed
-                 ? `<div class="status-items">${doors
-                     .filter((d) => d.state === "on")
-                     .map(
-                       (d) =>
-                         `<span class="status-item warn">${this._escapeHtml(d.name)}</span>`
-                     )
-                     .join("")}</div>`
-                 : ""
-             }
-           </div>`
-        : "";
-
-    const windowSection =
-      this._config.show_windows
-        ? `<div class="status-group">
-             <div class="status-header">
-               <ha-icon icon="mdi:car-windshield-outline"></ha-icon>
-               <span>Windows</span>
-               <span class="status-badge ${allWindowsClosed ? "ok" : "warn"}">${allWindowsClosed ? "All Closed" : "Open"}</span>
-             </div>
-             ${
-               !allWindowsClosed
-                 ? `<div class="status-items">${windows
-                     .filter((w) => w.state === "on")
-                     .map(
-                       (w) =>
-                         `<span class="status-item warn">${this._escapeHtml(w.name)}</span>`
-                     )
-                     .join("")}</div>`
-                 : ""
-             }
-           </div>`
-        : "";
-
-    const lockSection =
-      this._config.show_locks
-        ? `<div class="status-group">
-             <div class="status-header">
-               <ha-icon icon="mdi:${allLocked ? "lock" : "lock-open-variant"}"></ha-icon>
-               <span>Locks</span>
-               <span class="status-badge ${allLocked ? "ok" : "warn"}">${allLocked ? "Locked" : "Unlocked"}</span>
-             </div>
-             ${
-               !allLocked
-                 ? `<div class="status-items">${locks
-                     .filter((l) => l.state === "on")
-                     .map(
-                       (l) =>
-                         `<span class="status-item warn">${this._escapeHtml(l.name)}</span>`
-                     )
-                     .join("")}</div>`
-                 : ""
-             }
            </div>`
         : "";
 
@@ -1719,149 +1592,133 @@ class ToyotaCarCard extends HTMLElement {
             --mdc-icon-size: 18px;
           }
 
-          /* Tire grid - removed, shown on vehicle overlay */
-
-          /* Status groups */
-          .status-sections {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin-top: 10px;
-          }
-          .status-group {
-            background: var(--card-background-color, var(--ha-card-background, #f5f5f5));
-            border: 1px solid var(--divider-color, #e0e0e0);
-            border-radius: 10px;
-            padding: 10px 14px;
-          }
-          .status-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            --mdc-icon-size: 20px;
-            color: var(--primary-text-color);
-            font-size: 0.9em;
-          }
-          .status-header span:first-of-type {
-            flex: 1;
-            font-weight: 500;
-          }
-          .status-badge {
-            font-size: 0.75em;
-            font-weight: 600;
-            padding: 2px 10px;
-            border-radius: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-          }
-          .status-badge.ok {
-            background: rgba(76,175,80,0.15);
-            color: var(--ccc-ok);
-          }
-          .status-badge.warn {
-            background: rgba(255,152,0,0.15);
-            color: var(--ccc-warning);
-          }
-          .status-items {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 8px;
-          }
-          .status-item {
-            font-size: 0.78em;
-            padding: 2px 8px;
-            border-radius: 8px;
-          }
-          .status-item.warn {
-            background: rgba(255,152,0,0.12);
-            color: var(--ccc-warning);
-          }
-
           /* SVG Car Styles */
           .car-image svg {
             color: var(--primary-text-color);
             opacity: 0.7;
           }
 
-          /* Vehicle layout – columns flanking the car image */
-          .vehicle-layout {
+          /* Vehicle image container with overlays */
+          .car-image-container {
+            position: relative;
             display: flex;
-            align-items: stretch;
             justify-content: center;
-            gap: 0;
             margin: 8px 0 16px 0;
+            overflow: visible;
           }
-          .vi-center-col {
+          .car-image-container .car-image {
+            margin: 0;
+          }
+
+          /* Overlay indicator base */
+          .ov {
+            position: absolute;
             display: flex;
             flex-direction: column;
             align-items: center;
-            flex: 0 1 auto;
-            min-width: 0;
-          }
-          .vi-center-col .car-image { margin: 0; }
-          .vi-center-row {
-            display: flex;
-            justify-content: center;
-            gap: 12px;
-            padding: 4px 0;
-          }
-          .vi-column {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 4px;
-            padding: 4px 2px;
-            min-width: 72px;
-            flex: 0 0 auto;
-          }
-          .vi-left { align-items: flex-end; text-align: right; }
-          .vi-right { align-items: flex-start; text-align: left; }
-          .vi-group {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            padding: 4px 0;
-          }
-          .vi-group-title {
-            font-size: 0.65em;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            opacity: 0.5;
-            font-weight: 600;
-            padding: 0 2px;
-          }
-          .vi {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            padding: 2px 4px;
-            border-radius: 6px;
+            gap: 1px;
             background: transparent;
-            font-size: 0.75em;
-            white-space: nowrap;
+            z-index: 2;
             cursor: default;
+            pointer-events: auto;
           }
-          .vi:hover {
-            background: var(--secondary-background-color, rgba(0,0,0,0.05));
+          .ov-label {
+            font-size: 9px;
+            font-weight: 600;
+            white-space: nowrap;
+            text-shadow: 0 0 3px var(--card-background-color, #fff), 0 0 6px var(--card-background-color, #fff);
           }
-          .vi-horiz {
-            flex-direction: row;
-          }
-          .vi-dot {
-            width: 6px; height: 6px;
-            border-radius: 50%;
-            flex-shrink: 0;
-          }
-          .vi-dot.ok { background: var(--ccc-ok, #4caf50); }
-          .vi-dot.alert { background: var(--ccc-warning, #ff9800); }
-          .vi-label {
-            font-size: 0.9em;
-            opacity: 0.85;
-          }
-          .vi-tire-val {
+          .ov-tire {
+            font-size: 13px;
             font-weight: 700;
-            font-size: 1em;
+            text-shadow: 0 0 3px var(--card-background-color, #fff), 0 0 6px var(--card-background-color, #fff);
+          }
+
+          /* Tire positions – at the wheels */
+          .ov-tire-fl { top: 16%; left: 10%; }
+          .ov-tire-fr { top: 16%; right: 10%; }
+          .ov-tire-rl { top: 70%; left: 10%; }
+          .ov-tire-rr { top: 70%; right: 10%; }
+
+          /* Door positions – on the door panels */
+          .ov-door-fl { top: 30%; left: 14%; }
+          .ov-door-fr { top: 30%; right: 14%; }
+          .ov-door-rl { top: 50%; left: 14%; }
+          .ov-door-rr { top: 50%; right: 14%; }
+
+          /* Hood and trunk – top and bottom center */
+          .ov-hood { top: 4%; left: 50%; transform: translateX(-50%); }
+          .ov-trunk { bottom: 2%; left: 50%; transform: translateX(-50%); }
+
+          /* Window positions – inside of doors */
+          .ov-win-fl { top: 30%; left: 26%; }
+          .ov-win-fr { top: 30%; right: 26%; }
+          .ov-win-rl { top: 50%; left: 26%; }
+          .ov-win-rr { top: 50%; right: 26%; }
+
+          /* Moonroof – center-top */
+          .ov-moonroof { top: 22%; left: 50%; transform: translateX(-50%); }
+
+          /* Lock positions – below doors */
+          .ov-lock-fl { top: 38%; left: 14%; }
+          .ov-lock-fr { top: 38%; right: 14%; }
+          .ov-lock-rl { top: 58%; left: 14%; }
+          .ov-lock-rr { top: 58%; right: 14%; }
+          .ov-lock-trunk { bottom: 10%; left: 50%; transform: translateX(-50%); }
+
+          /* Map section */
+          .map-section {
+            margin: 12px 0;
+          }
+          .map-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85em;
+            color: var(--primary-text-color);
+            margin-bottom: 8px;
+            --mdc-icon-size: 18px;
+          }
+          .map-wrap {
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--divider-color, #e0e0e0);
+          }
+          .map-wrap iframe {
+            width: 100%;
+            height: 200px;
+            display: block;
+          }
+
+          /* Action buttons */
+          .actions-row {
+            display: flex;
+            gap: 10px;
+            margin: 12px 0;
+          }
+          .action-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: 1px solid var(--divider-color, #e0e0e0);
+            border-radius: 10px;
+            background: var(--card-background-color, var(--ha-card-background, #f5f5f5));
+            color: var(--primary-text-color);
+            font-size: 0.85em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+          }
+          .action-btn:hover {
+            background: var(--primary-color, #03a9f4);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          }
+          .action-btn:active {
+            transform: scale(0.97);
           }
         </style>
 
@@ -1880,15 +1737,33 @@ class ToyotaCarCard extends HTMLElement {
           ${serviceSection}
         </div>
 
-        ${tireSection}
-
-        <div class="status-sections">
-          ${lockSection}
-          ${doorSection}
-          ${windowSection}
-        </div>
+        ${buttonsSection}
+        ${mapSection}
       </ha-card>
     `;
+
+    // Attach button event handlers
+    if (this._config.show_buttons !== false) {
+      const card = this.shadowRoot.querySelector("ha-card");
+      if (card) {
+        card.querySelectorAll(".action-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            const action = btn.dataset.action;
+            if (action === "lock" && this._config.lock_entity) {
+              const lockState = this._getState(this._config.lock_entity);
+              const service = lockState && lockState.state === "locked" ? "unlock" : "lock";
+              this._hass.callService("lock", service, {
+                entity_id: this._config.lock_entity,
+              });
+            } else if (action === "engine" && this._config.engine_start_entity) {
+              this._hass.callService("button", "press", {
+                entity_id: this._config.engine_start_entity,
+              });
+            }
+          });
+        });
+      }
+    }
   }
 
   _escapeHtml(str) {
@@ -1966,6 +1841,7 @@ const ENTITY_KEYS = [
   { key: "rear_driver_door_lock", label: "Rear Driver Door Lock", section: "Locks", domain: "binary_sensor" },
   { key: "rear_passenger_door_lock", label: "Rear Passenger Door Lock", section: "Locks", domain: "binary_sensor" },
   { key: "trunk_door_lock", label: "Trunk Lock", section: "Locks", domain: "binary_sensor" },
+  { key: "location", label: "Location (Device Tracker)", section: "Location", domain: "device_tracker" },
 ];
 
 // ── Visual card editor ──
@@ -2237,6 +2113,8 @@ class ToyotaCarCardEditor extends HTMLElement {
       { key: "show_ev",      label: "Show EV Info",       defaultOn: false },
       { key: "show_speed",   label: "Show Speed",         defaultOn: false },
       { key: "show_service", label: "Show Next Service",  defaultOn: false },
+      { key: "show_map",     label: "Show Map",           defaultOn: true },
+      { key: "show_buttons", label: "Show Action Buttons",defaultOn: true },
     ];
 
     for (const t of toggles) {
@@ -2248,6 +2126,23 @@ class ToyotaCarCardEditor extends HTMLElement {
       }));
     }
     editorRoot.appendChild(toggleSection);
+
+    // ── Action button entities ──
+    const actSection = document.createElement("div");
+    actSection.className = "section";
+    actSection.innerHTML = '<div class="section-title">Action Buttons</div>';
+
+    actSection.appendChild(this._makeEntityPicker(
+      "Lock Entity (lock domain)", "lock", this._config.lock_entity || "",
+      (val) => this._updateConfig("lock_entity", val)
+    ));
+
+    actSection.appendChild(this._makeEntityPicker(
+      "Remote Start Entity (button domain)", "button", this._config.engine_start_entity || "",
+      (val) => this._updateConfig("engine_start_entity", val)
+    ));
+
+    editorRoot.appendChild(actSection);
 
     // ── Entities ──
     const entSection = document.createElement("div");
