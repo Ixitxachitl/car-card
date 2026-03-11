@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.9";
+const CARD_VERSION = "1.11.0";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1167,7 +1167,6 @@ class ToyotaCarCard extends HTMLElement {
     if (card) card.remove();
     this._mapCard = null;
     this._mapCardLoading = false;
-    this._leafletMap = null;
     this._render();
   }
 
@@ -1828,98 +1827,42 @@ class ToyotaCarCard extends HTMLElement {
   }
 
   async _updateMap(container, entityIds) {
-    // Gather coordinates from device_tracker entities
-    const coords = [];
-    for (const id of entityIds) {
-      const s = this._getState(id);
-      if (s && s.attributes && s.attributes.latitude && s.attributes.longitude) {
-        coords.push({ id, lat: s.attributes.latitude, lng: s.attributes.longitude });
+    // If map card already exists, just update hass
+    if (this._mapCard) {
+      this._mapCard.hass = this._hass;
+      if (!container.contains(this._mapCard)) {
+        container.innerHTML = "";
+        container.appendChild(this._mapCard);
       }
-    }
-    if (coords.length === 0) {
-      container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">No location data</div>`;
       return;
     }
 
-    // If Leaflet map already exists, just update markers and view
-    if (this._leafletMap) {
-      this._updateMapMarkers(coords);
-      return;
-    }
+    // Prevent concurrent creation
+    if (this._mapCardLoading) return;
+    this._mapCardLoading = true;
 
-    // Wait for Leaflet to be available (HA loads it)
-    if (!window.L) {
-      container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">Map loading...</div>`;
-      setTimeout(() => this._updateMap(container, entityIds), 1000);
-      return;
-    }
-
-    // Inject Leaflet CSS if not already present
-    if (!this.shadowRoot.querySelector("#leaflet-css")) {
-      const leafletLink = document.createElement("link");
-      leafletLink.id = "leaflet-css";
-      leafletLink.rel = "stylesheet";
-      leafletLink.href = "/static/images/leaflet/leaflet.css";
-      this.shadowRoot.appendChild(leafletLink);
-    }
-
-    // Create Leaflet map
-    container.innerHTML = "";
-    const mapDiv = document.createElement("div");
-    mapDiv.style.width = "100%";
-    mapDiv.style.height = "100%";
-    container.appendChild(mapDiv);
-
-    const center = coords[0];
-    this._leafletMap = L.map(mapDiv, {
-      center: [center.lat, center.lng],
-      zoom: 15,
-      zoomControl: true,
-      attributionControl: false,
-    });
-
-    // Use OpenStreetMap tiles
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-    }).addTo(this._leafletMap);
-
-    this._mapMarkers = [];
-    this._updateMapMarkers(coords);
-
-    // Invalidate size multiple times as layout settles
-    const invalidate = () => {
-      if (this._leafletMap) {
-        this._leafletMap.invalidateSize();
-        this._leafletMap.setView([center.lat, center.lng], 15);
-      }
-    };
-    setTimeout(invalidate, 100);
-    setTimeout(invalidate, 500);
-    setTimeout(invalidate, 1500);
-
-    // ResizeObserver for ongoing container size changes
-    if (window.ResizeObserver && !this._mapResizeObserver) {
-      this._mapResizeObserver = new ResizeObserver(() => {
-        if (this._leafletMap) this._leafletMap.invalidateSize();
+    try {
+      const helpers = await window.loadCardHelpers();
+      this._mapCard = await helpers.createCardElement({
+        type: "map",
+        entities: entityIds.map((id) => ({ entity: id })),
+        default_zoom: 15,
+        hours_to_show: 0,
       });
-      this._mapResizeObserver.observe(container);
-    }
-  }
+      this._mapCard.hass = this._hass;
 
-  _updateMapMarkers(coords) {
-    if (!this._leafletMap) return;
-    // Remove old markers
-    if (this._mapMarkers) {
-      this._mapMarkers.forEach((m) => m.remove());
-    }
-    this._mapMarkers = [];
-    for (const c of coords) {
-      const marker = L.marker([c.lat, c.lng]).addTo(this._leafletMap);
-      this._mapMarkers.push(marker);
-    }
-    // Center on first marker
-    if (coords.length > 0) {
-      this._leafletMap.setView([coords[0].lat, coords[0].lng], this._leafletMap.getZoom());
+      // Wait a frame so the container is laid out, then append
+      requestAnimationFrame(() => {
+        const cur = this.shadowRoot.getElementById("map-container");
+        if (cur) {
+          cur.innerHTML = "";
+          cur.appendChild(this._mapCard);
+        }
+      });
+    } catch (e) {
+      container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">Map unavailable</div>`;
+    } finally {
+      this._mapCardLoading = false;
     }
   }
 
