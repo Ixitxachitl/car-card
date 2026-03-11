@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.0";
+const CARD_VERSION = "1.10.1";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1374,42 +1374,30 @@ class ToyotaCarCard extends HTMLElement {
 
     // Location map section – supports current location and last parked
     let mapSection = "";
+    let mapEntities = [];
     if (this._config.show_map !== false) {
       const curLoc = currentLocationId ? this._getState(currentLocationId) : null;
       const parkedLoc = lastParkedId ? this._getState(lastParkedId) : null;
 
-      // Use current location if available, fall back to last parked
-      const primaryLoc = curLoc || parkedLoc;
-      if (primaryLoc) {
-        const lat = primaryLoc.attributes.latitude;
-        const lon = primaryLoc.attributes.longitude;
-        if (lat && lon) {
-          // Build location status line
-          let locLabels = "";
-          if (curLoc) {
-            locLabels += `<span><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(curLoc.state || "Current")}</span>`;
-          }
-          if (parkedLoc) {
-            const pLat = parkedLoc.attributes.latitude;
-            const pLon = parkedLoc.attributes.longitude;
-            locLabels += `<span><ha-icon icon="mdi:parking" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(parkedLoc.state || "Last Parked")}</span>`;
-          }
-
-          mapSection = `<div class="map-section">
-            <div class="map-header">
-              <ha-icon icon="mdi:map-marker" style="--mdc-icon-size: 18px;"></ha-icon>
-              <div class="map-labels">${locLabels}</div>
-            </div>
-            <div class="map-wrap">
-              <iframe
-                src="https://www.openstreetmap.org/export/embed.html?bbox=${lon-0.005},${lat-0.004},${lon+0.005},${lat+0.004}&layer=mapnik&marker=${lat},${lon}"
-                frameborder="0"
-                scrolling="no"
-                allowfullscreen
-              ></iframe>
-            </div>
-          </div>`;
+      if (curLoc || parkedLoc) {
+        // Build location status line
+        let locLabels = "";
+        if (curLoc) {
+          locLabels += `<span><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(curLoc.state || "Current")}</span>`;
+          mapEntities.push({ entity_id: currentLocationId });
         }
+        if (parkedLoc) {
+          locLabels += `<span><ha-icon icon="mdi:parking" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(parkedLoc.state || "Last Parked")}</span>`;
+          mapEntities.push({ entity_id: lastParkedId });
+        }
+
+        mapSection = `<div class="map-section">
+          <div class="map-header">
+            <ha-icon icon="mdi:map-marker" style="--mdc-icon-size: 18px;"></ha-icon>
+            <div class="map-labels">${locLabels}</div>
+          </div>
+          <div class="map-wrap"></div>
+        </div>`;
       }
     }
 
@@ -1711,10 +1699,9 @@ class ToyotaCarCard extends HTMLElement {
             overflow: hidden;
             border: 1px solid var(--divider-color, #e0e0e0);
           }
-          .map-wrap iframe {
-            width: 100%;
-            height: 200px;
+          .map-wrap ha-map {
             display: block;
+            height: 200px;
           }
 
           /* Action buttons */
@@ -1776,6 +1763,25 @@ class ToyotaCarCard extends HTMLElement {
         ${mapSection}
       </ha-card>
     `;
+
+    // Attach ha-map to the map container (persisted across re-renders)
+    if (mapEntities.length > 0) {
+      const mapWrap = this.shadowRoot.querySelector(".map-wrap");
+      if (mapWrap) {
+        if (!this._mapEl) {
+          this._mapEl = document.createElement("ha-map");
+          this._mapEl.style.height = "200px";
+          this._mapEl.style.display = "block";
+        }
+        this._mapEl.hass = this._hass;
+        this._mapEl.entities = mapEntities;
+        this._mapEl.zoom = 15;
+        this._mapEl.darkMode = !!(this._hass.themes && this._hass.themes.darkMode);
+        mapWrap.appendChild(this._mapEl);
+      }
+    } else {
+      this._mapEl = null;
+    }
 
     // Attach button event handlers
     if (this._config.show_buttons !== false) {
