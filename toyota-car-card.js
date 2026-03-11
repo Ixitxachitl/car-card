@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.6";
+const CARD_VERSION = "1.10.7";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1854,6 +1854,15 @@ class ToyotaCarCard extends HTMLElement {
       return;
     }
 
+    // Inject Leaflet CSS if not already present
+    if (!this.shadowRoot.querySelector("#leaflet-css")) {
+      const leafletLink = document.createElement("link");
+      leafletLink.id = "leaflet-css";
+      leafletLink.rel = "stylesheet";
+      leafletLink.href = "/static/images/leaflet/leaflet.css";
+      this.shadowRoot.appendChild(leafletLink);
+    }
+
     // Create Leaflet map
     container.innerHTML = "";
     const mapDiv = document.createElement("div");
@@ -1865,20 +1874,39 @@ class ToyotaCarCard extends HTMLElement {
     this._leafletMap = L.map(mapDiv, {
       center: [center.lat, center.lng],
       zoom: 15,
-      zoomControl: false,
+      zoomControl: true,
       attributionControl: false,
     });
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+
+    // Use HA's tile proxy which matches the HA map card appearance
+    const tileUrl = window.hassConnection
+      ? "/api/map/tile/{z}/{x}/{y}"
+      : "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+    L.tileLayer(tileUrl, {
       maxZoom: 19,
     }).addTo(this._leafletMap);
 
     this._mapMarkers = [];
     this._updateMapMarkers(coords);
 
-    // Invalidate size after layout settles
-    setTimeout(() => {
-      if (this._leafletMap) this._leafletMap.invalidateSize();
-    }, 300);
+    // Invalidate size multiple times as layout settles
+    const invalidate = () => {
+      if (this._leafletMap) {
+        this._leafletMap.invalidateSize();
+        this._leafletMap.setView([center.lat, center.lng], 15);
+      }
+    };
+    setTimeout(invalidate, 100);
+    setTimeout(invalidate, 500);
+    setTimeout(invalidate, 1500);
+
+    // ResizeObserver for ongoing container size changes
+    if (window.ResizeObserver && !this._mapResizeObserver) {
+      this._mapResizeObserver = new ResizeObserver(() => {
+        if (this._leafletMap) this._leafletMap.invalidateSize();
+      });
+      this._mapResizeObserver.observe(container);
+    }
   }
 
   _updateMapMarkers(coords) {
@@ -1968,7 +1996,7 @@ const ENTITY_KEYS = [
   { key: "trunk_door_lock", label: "Trunk Lock", section: "Locks", domain: "binary_sensor" },
   { key: "current_location", label: "Current Location", section: "Location", domain: "device_tracker" },
   { key: "last_parked_location", label: "Last Parked Location", section: "Location", domain: "device_tracker" },
-  { key: "engine_status", label: "Engine Status (Remote Start)", section: "General", domain: "sensor" },
+  { key: "engine_status", label: "Engine Status (Remote Start)", section: "General", domain: "binary_sensor" },
 ];
 
 // ── Visual card editor ──
@@ -2265,7 +2293,7 @@ class ToyotaCarCardEditor extends HTMLElement {
     ));
 
     actSection.appendChild(this._makeEntityPicker(
-      "Engine Status Entity (sensor)", "sensor", this._config.engine_status_entity || "",
+      "Engine Status Entity (binary_sensor)", "binary_sensor", this._config.engine_status_entity || "",
       (val) => this._updateConfig("engine_status_entity", val)
     ));
 
