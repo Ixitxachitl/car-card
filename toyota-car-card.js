@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.5.0";
+const CARD_VERSION = "1.7.0";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1265,6 +1265,9 @@ class ToyotaCarCard extends HTMLElement {
     const frTire = this._getStateValue(frTireId);
     const rlTire = this._getStateValue(rlTireId);
     const rrTire = this._getStateValue(rrTireId);
+    const tireUnit =
+      this._getState(flTireId)?.attributes?.unit_of_measurement ||
+      this._getState(frTireId)?.attributes?.unit_of_measurement || "psi";
 
     const evBattery = this._getStateValue(evBatteryId);
     const evRange = this._getStateValue(evRangeId);
@@ -1360,7 +1363,7 @@ class ToyotaCarCard extends HTMLElement {
 
     const tireIndicator = (val, label, cssClass) => {
       if (val === null) return "";
-      return `<div class="vehicle-indicator tire-ind ${cssClass}" style="color: ${tireColor(val)};" title="${label}: ${val} psi">
+      return `<div class="vehicle-indicator tire-ind ${cssClass}" style="color: ${tireColor(val)};" title="${label}: ${val} ${tireUnit}">
         <span>${this._formatNumber(val)}</span>
       </div>`;
     };
@@ -1377,6 +1380,14 @@ class ToyotaCarCard extends HTMLElement {
       overlays += windowIndicator(this._getStateValue(winFR), "Front Passenger Window", "ind-win-fr");
       overlays += windowIndicator(this._getStateValue(winRL), "Rear Driver Window", "ind-win-rl");
       overlays += windowIndicator(this._getStateValue(winRR), "Rear Passenger Window", "ind-win-rr");
+      const moonState = this._getStateValue(moonroof);
+      if (moonState !== null) {
+        const moonOpen = moonState === "on";
+        const moonColor = moonOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
+        overlays += `<div class="vehicle-indicator ind-moonroof" style="color: ${moonColor};" title="Moonroof: ${moonOpen ? 'Open' : 'Closed'}">
+          <ha-icon icon="mdi:car-select" style="--mdc-icon-size: 16px;"></ha-icon>
+        </div>`;
+      }
     }
     if (this._config.show_locks !== false) {
       overlays += lockIndicator(this._getStateValue(lockFL), "Front Driver Lock", "ind-lock-fl");
@@ -1458,32 +1469,7 @@ class ToyotaCarCard extends HTMLElement {
            </div>`
         : "";
 
-    const tireSection =
-      this._config.show_tires
-        ? `<div class="tire-grid">
-             <div class="tire-label">Tire Pressure (psi)</div>
-             <div class="tire-row">
-               <div class="tire" style="color: ${tireColor(flTire)}">
-                 <span class="tire-pos">FL</span>
-                 <span class="tire-val">${this._formatNumber(flTire)}</span>
-               </div>
-               <div class="tire" style="color: ${tireColor(frTire)}">
-                 <span class="tire-pos">FR</span>
-                 <span class="tire-val">${this._formatNumber(frTire)}</span>
-               </div>
-             </div>
-             <div class="tire-row">
-               <div class="tire" style="color: ${tireColor(rlTire)}">
-                 <span class="tire-pos">RL</span>
-                 <span class="tire-val">${this._formatNumber(rlTire)}</span>
-               </div>
-               <div class="tire" style="color: ${tireColor(rrTire)}">
-                 <span class="tire-pos">RR</span>
-                 <span class="tire-val">${this._formatNumber(rrTire)}</span>
-               </div>
-             </div>
-           </div>`
-        : "";
+    const tireSection = "";
 
     const doorSection =
       this._config.show_doors
@@ -1657,39 +1643,7 @@ class ToyotaCarCard extends HTMLElement {
             --mdc-icon-size: 18px;
           }
 
-          /* Tire grid */
-          .tire-grid {
-            margin: 14px 0;
-          }
-          .tire-label {
-            font-size: 0.78em;
-            color: var(--secondary-text-color);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-            text-align: center;
-          }
-          .tire-row {
-            display: flex;
-            justify-content: center;
-            gap: 80px;
-            margin-bottom: 6px;
-          }
-          .tire {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-width: 50px;
-          }
-          .tire-pos {
-            font-size: 0.7em;
-            text-transform: uppercase;
-            opacity: 0.7;
-          }
-          .tire-val {
-            font-size: 1.3em;
-            font-weight: 700;
-          }
+          /* Tire grid - removed, shown on vehicle overlay */
 
           /* Status groups */
           .status-sections {
@@ -1783,29 +1737,32 @@ class ToyotaCarCard extends HTMLElement {
             font-weight: 700;
           }
 
-          /* Door indicators – along left/right sides of vehicle */
-          .ind-door-fl { top: 30%; left: 5%; }
-          .ind-door-fr { top: 30%; right: 5%; }
-          .ind-door-rl { top: 52%; left: 5%; }
-          .ind-door-rr { top: 52%; right: 5%; }
+          /* Door indicators – tight to vehicle sides */
+          .ind-door-fl { top: 32%; left: 22%; }
+          .ind-door-fr { top: 32%; right: 22%; }
+          .ind-door-rl { top: 52%; left: 22%; }
+          .ind-door-rr { top: 52%; right: 22%; }
 
-          /* Window indicators – slightly inward from doors */
-          .ind-win-fl { top: 22%; left: 14%; }
-          .ind-win-fr { top: 22%; right: 14%; }
-          .ind-win-rl { top: 44%; left: 14%; }
-          .ind-win-rr { top: 44%; right: 14%; }
+          /* Window indicators – slightly above doors, inward */
+          .ind-win-fl { top: 26%; left: 28%; }
+          .ind-win-fr { top: 26%; right: 28%; }
+          .ind-win-rl { top: 46%; left: 28%; }
+          .ind-win-rr { top: 46%; right: 28%; }
 
-          /* Lock indicators – below doors */
-          .ind-lock-fl { top: 38%; left: 5%; }
-          .ind-lock-fr { top: 38%; right: 5%; }
-          .ind-lock-rl { top: 60%; left: 5%; }
-          .ind-lock-rr { top: 60%; right: 5%; }
+          /* Moonroof indicator – top center */
+          .ind-moonroof { top: 20%; left: 50%; transform: translateX(-50%); }
 
-          /* Tire indicators – at corners */
-          .ind-tire-fl { top: 15%; left: 2%; }
-          .ind-tire-fr { top: 15%; right: 2%; }
-          .ind-tire-rl { top: 72%; left: 2%; }
-          .ind-tire-rr { top: 72%; right: 2%; }
+          /* Lock indicators – just below doors */
+          .ind-lock-fl { top: 38%; left: 22%; }
+          .ind-lock-fr { top: 38%; right: 22%; }
+          .ind-lock-rl { top: 58%; left: 22%; }
+          .ind-lock-rr { top: 58%; right: 22%; }
+
+          /* Tire indicators – at wheel positions */
+          .ind-tire-fl { top: 18%; left: 18%; }
+          .ind-tire-fr { top: 18%; right: 18%; }
+          .ind-tire-rl { top: 70%; left: 18%; }
+          .ind-tire-rr { top: 70%; right: 18%; }
         </style>
 
         <div class="header">
