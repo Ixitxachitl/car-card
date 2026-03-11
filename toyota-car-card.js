@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.7.0";
+const CARD_VERSION = "1.8.0";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1331,80 +1331,156 @@ class ToyotaCarCard extends HTMLElement {
       ? `<img src="${this._encodeImageUrl(this._config.image_url)}" alt="Vehicle" />`
       : TRUCK_SVG;
 
-    // Build overlay indicators on the vehicle image
-    const doorIndicator = (state, label, cssClass) => {
+    // Build indicator columns flanking the vehicle image
+    const statusDot = (isAlert) =>
+      `<span class="vi-dot ${isAlert ? "alert" : "ok"}"></span>`;
+
+    const makeIndicator = (state, label, icon, shortLabel) => {
       if (state === null) return "";
-      const isOpen = state === "on";
-      const color = isOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-      const icon = isOpen ? "mdi:car-door" : "mdi:car-door";
-      return `<div class="vehicle-indicator ${cssClass}" style="color: ${color};" title="${label}: ${isOpen ? "Open" : "Closed"}">
-        <ha-icon icon="${icon}" style="--mdc-icon-size: 18px;"></ha-icon>
+      const isAlert = state === "on";
+      const color = isAlert ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
+      return `<div class="vi" style="--vi-color: ${color};" title="${label}: ${isAlert ? 'Open' : 'Closed'}">
+        ${statusDot(isAlert)}
+        <ha-icon icon="${icon}" style="--mdc-icon-size: 16px; color: ${color};"></ha-icon>
+        <span class="vi-label">${shortLabel}</span>
       </div>`;
     };
 
-    const windowIndicator = (state, label, cssClass) => {
-      if (state === null) return "";
-      const isOpen = state === "on";
-      const color = isOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-      return `<div class="vehicle-indicator ${cssClass}" style="color: ${color};" title="${label}: ${isOpen ? "Open" : "Closed"}">
-        <ha-icon icon="mdi:car-windshield-outline" style="--mdc-icon-size: 16px;"></ha-icon>
-      </div>`;
-    };
-
-    const lockIndicator = (state, label, cssClass) => {
+    const makeLockIndicator = (state, label, shortLabel) => {
       if (state === null) return "";
       const isUnlocked = state === "on";
       const color = isUnlocked ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
       const icon = isUnlocked ? "mdi:lock-open-variant" : "mdi:lock";
-      return `<div class="vehicle-indicator ${cssClass}" style="color: ${color};" title="${label}: ${isUnlocked ? "Unlocked" : "Locked"}">
-        <ha-icon icon="${icon}" style="--mdc-icon-size: 16px;"></ha-icon>
+      return `<div class="vi" style="--vi-color: ${color};" title="${label}: ${isUnlocked ? 'Unlocked' : 'Locked'}">
+        ${statusDot(isUnlocked)}
+        <ha-icon icon="${icon}" style="--mdc-icon-size: 16px; color: ${color};"></ha-icon>
+        <span class="vi-label">${shortLabel}</span>
       </div>`;
     };
 
-    const tireIndicator = (val, label, cssClass) => {
+    const makeTireIndicator = (val, label, shortLabel) => {
       if (val === null) return "";
-      return `<div class="vehicle-indicator tire-ind ${cssClass}" style="color: ${tireColor(val)};" title="${label}: ${val} ${tireUnit}">
-        <span>${this._formatNumber(val)}</span>
+      const color = tireColor(val);
+      return `<div class="vi" style="--vi-color: ${color};" title="${label}: ${val} ${tireUnit}">
+        <span class="vi-tire-val" style="color: ${color};">${this._formatNumber(val)}</span>
+        <span class="vi-label">${shortLabel}</span>
       </div>`;
     };
 
-    let overlays = "";
+    // Left column = Driver side, Right column = Passenger side
+    let leftInds = "";
+    let rightInds = "";
+
+    // --- Front section ---
+    leftInds += '<div class="vi-group"><span class="vi-group-title">Front</span>';
+    rightInds += '<div class="vi-group"><span class="vi-group-title">Front</span>';
+
+    if (this._config.show_tires !== false) {
+      leftInds += makeTireIndicator(flTire, "Front Driver Tire", "Tire");
+      rightInds += makeTireIndicator(frTire, "Front Passenger Tire", "Tire");
+    }
     if (this._config.show_doors !== false) {
-      overlays += doorIndicator(this._getStateValue(doorFL), "Front Driver Door", "ind-door-fl");
-      overlays += doorIndicator(this._getStateValue(doorFR), "Front Passenger Door", "ind-door-fr");
-      overlays += doorIndicator(this._getStateValue(doorRL), "Rear Driver Door", "ind-door-rl");
-      overlays += doorIndicator(this._getStateValue(doorRR), "Rear Passenger Door", "ind-door-rr");
+      leftInds += makeIndicator(this._getStateValue(doorFL), "Front Driver Door", "mdi:car-door", "Door");
+      rightInds += makeIndicator(this._getStateValue(doorFR), "Front Passenger Door", "mdi:car-door", "Door");
     }
     if (this._config.show_windows !== false) {
-      overlays += windowIndicator(this._getStateValue(winFL), "Front Driver Window", "ind-win-fl");
-      overlays += windowIndicator(this._getStateValue(winFR), "Front Passenger Window", "ind-win-fr");
-      overlays += windowIndicator(this._getStateValue(winRL), "Rear Driver Window", "ind-win-rl");
-      overlays += windowIndicator(this._getStateValue(winRR), "Rear Passenger Window", "ind-win-rr");
+      leftInds += makeIndicator(this._getStateValue(winFL), "Front Driver Window", "mdi:car-windshield-outline", "Window");
+      rightInds += makeIndicator(this._getStateValue(winFR), "Front Passenger Window", "mdi:car-windshield-outline", "Window");
+    }
+    if (this._config.show_locks !== false) {
+      leftInds += makeLockIndicator(this._getStateValue(lockFL), "Front Driver Lock", "Lock");
+      rightInds += makeLockIndicator(this._getStateValue(lockFR), "Front Passenger Lock", "Lock");
+    }
+    leftInds += '</div>';
+    rightInds += '</div>';
+
+    // --- Rear section ---
+    leftInds += '<div class="vi-group"><span class="vi-group-title">Rear</span>';
+    rightInds += '<div class="vi-group"><span class="vi-group-title">Rear</span>';
+
+    if (this._config.show_tires !== false) {
+      leftInds += makeTireIndicator(rlTire, "Rear Driver Tire", "Tire");
+      rightInds += makeTireIndicator(rrTire, "Rear Passenger Tire", "Tire");
+    }
+    if (this._config.show_doors !== false) {
+      leftInds += makeIndicator(this._getStateValue(doorRL), "Rear Driver Door", "mdi:car-door", "Door");
+      rightInds += makeIndicator(this._getStateValue(doorRR), "Rear Passenger Door", "mdi:car-door", "Door");
+    }
+    if (this._config.show_windows !== false) {
+      leftInds += makeIndicator(this._getStateValue(winRL), "Rear Driver Window", "mdi:car-windshield-outline", "Window");
+      rightInds += makeIndicator(this._getStateValue(winRR), "Rear Passenger Window", "mdi:car-windshield-outline", "Window");
+    }
+    if (this._config.show_locks !== false) {
+      leftInds += makeLockIndicator(this._getStateValue(lockRL), "Rear Driver Lock", "Lock");
+      rightInds += makeLockIndicator(this._getStateValue(lockRR), "Rear Passenger Lock", "Lock");
+    }
+    leftInds += '</div>';
+    rightInds += '</div>';
+
+    // Center indicators (hood, trunk, moonroof)
+    let topCenter = "";
+    let bottomCenter = "";
+
+    if (this._config.show_doors !== false) {
+      const hoodState = this._getStateValue(hoodId);
+      if (hoodState !== null) {
+        const hoodOpen = hoodState === "on";
+        const hoodColor = hoodOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
+        topCenter += `<div class="vi vi-horiz" style="--vi-color: ${hoodColor};" title="Hood: ${hoodOpen ? 'Open' : 'Closed'}">
+          ${statusDot(hoodOpen)}
+          <ha-icon icon="mdi:car-back" style="--mdc-icon-size: 16px; color: ${hoodColor};"></ha-icon>
+          <span class="vi-label">Hood</span>
+        </div>`;
+      }
+    }
+
+    if (this._config.show_windows !== false) {
       const moonState = this._getStateValue(moonroof);
       if (moonState !== null) {
         const moonOpen = moonState === "on";
         const moonColor = moonOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-        overlays += `<div class="vehicle-indicator ind-moonroof" style="color: ${moonColor};" title="Moonroof: ${moonOpen ? 'Open' : 'Closed'}">
-          <ha-icon icon="mdi:car-select" style="--mdc-icon-size: 16px;"></ha-icon>
+        topCenter += `<div class="vi vi-horiz" style="--vi-color: ${moonColor};" title="Moonroof: ${moonOpen ? 'Open' : 'Closed'}">
+          ${statusDot(moonOpen)}
+          <ha-icon icon="mdi:car-select" style="--mdc-icon-size: 16px; color: ${moonColor};"></ha-icon>
+          <span class="vi-label">Moonroof</span>
         </div>`;
       }
     }
-    if (this._config.show_locks !== false) {
-      overlays += lockIndicator(this._getStateValue(lockFL), "Front Driver Lock", "ind-lock-fl");
-      overlays += lockIndicator(this._getStateValue(lockFR), "Front Passenger Lock", "ind-lock-fr");
-      overlays += lockIndicator(this._getStateValue(lockRL), "Rear Driver Lock", "ind-lock-rl");
-      overlays += lockIndicator(this._getStateValue(lockRR), "Rear Passenger Lock", "ind-lock-rr");
-    }
-    if (this._config.show_tires !== false) {
-      overlays += tireIndicator(flTire, "Front Driver Tire", "ind-tire-fl");
-      overlays += tireIndicator(frTire, "Front Passenger Tire", "ind-tire-fr");
-      overlays += tireIndicator(rlTire, "Rear Driver Tire", "ind-tire-rl");
-      overlays += tireIndicator(rrTire, "Rear Passenger Tire", "ind-tire-rr");
+
+    if (this._config.show_doors !== false) {
+      const trunkState = this._getStateValue(trunkId);
+      if (trunkState !== null) {
+        const trunkOpen = trunkState === "on";
+        const trunkColor = trunkOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
+        bottomCenter += `<div class="vi vi-horiz" style="--vi-color: ${trunkColor};" title="Trunk: ${trunkOpen ? 'Open' : 'Closed'}">
+          ${statusDot(trunkOpen)}
+          <ha-icon icon="mdi:car-back" style="--mdc-icon-size: 16px; color: ${trunkColor}; transform: rotate(180deg);"></ha-icon>
+          <span class="vi-label">Trunk</span>
+        </div>`;
+      }
     }
 
-    const imageSection = `<div class="car-image-container">
-      <div class="car-image">${vehicleImg}</div>
-      ${overlays}
+    if (this._config.show_locks !== false) {
+      const trunkLockState = this._getStateValue(lockTrunk);
+      if (trunkLockState !== null) {
+        const trunkLocked = trunkLockState !== "on";
+        const tlColor = trunkLocked ? "var(--ccc-ok, #4caf50)" : "var(--ccc-warning, #ff9800)";
+        bottomCenter += `<div class="vi vi-horiz" style="--vi-color: ${tlColor};" title="Trunk Lock: ${trunkLocked ? 'Locked' : 'Unlocked'}">
+          ${statusDot(!trunkLocked)}
+          <ha-icon icon="${trunkLocked ? 'mdi:lock' : 'mdi:lock-open-variant'}" style="--mdc-icon-size: 16px; color: ${tlColor};"></ha-icon>
+          <span class="vi-label">Trunk Lock</span>
+        </div>`;
+      }
+    }
+
+    const imageSection = `<div class="vehicle-layout">
+      <div class="vi-column vi-left">${leftInds}</div>
+      <div class="vi-center-col">
+        ${topCenter ? `<div class="vi-center-row">${topCenter}</div>` : ""}
+        <div class="car-image">${vehicleImg}</div>
+        ${bottomCenter ? `<div class="vi-center-row">${bottomCenter}</div>` : ""}
+      </div>
+      <div class="vi-column vi-right">${rightInds}</div>
     </div>`;
 
     const fuelSection =
@@ -1708,61 +1784,85 @@ class ToyotaCarCard extends HTMLElement {
             opacity: 0.7;
           }
 
-          /* Vehicle overlay indicators */
-          .car-image-container {
-            position: relative;
+          /* Vehicle layout – columns flanking the car image */
+          .vehicle-layout {
             display: flex;
+            align-items: stretch;
             justify-content: center;
+            gap: 0;
             margin: 8px 0 16px 0;
           }
-          .car-image-container .car-image {
-            margin: 0;
+          .vi-center-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 0 1 auto;
+            min-width: 0;
           }
-          .vehicle-indicator {
-            position: absolute;
+          .vi-center-col .car-image { margin: 0; }
+          .vi-center-row {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            padding: 4px 0;
+          }
+          .vi-column {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
+            padding: 4px 2px;
+            min-width: 72px;
+            flex: 0 0 auto;
+          }
+          .vi-left { align-items: flex-end; text-align: right; }
+          .vi-right { align-items: flex-start; text-align: left; }
+          .vi-group {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 4px 0;
+          }
+          .vi-group-title {
+            font-size: 0.65em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.5;
+            font-weight: 600;
+            padding: 0 2px;
+          }
+          .vi {
             display: flex;
             align-items: center;
-            justify-content: center;
-            width: 28px; height: 28px;
+            gap: 4px;
+            padding: 2px 4px;
+            border-radius: 6px;
+            background: transparent;
+            font-size: 0.75em;
+            white-space: nowrap;
+            cursor: default;
+          }
+          .vi:hover {
+            background: var(--secondary-background-color, rgba(0,0,0,0.05));
+          }
+          .vi-horiz {
+            flex-direction: row;
+          }
+          .vi-dot {
+            width: 6px; height: 6px;
             border-radius: 50%;
-            background: var(--card-background-color, #fff);
-            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-            z-index: 2;
+            flex-shrink: 0;
           }
-          .vehicle-indicator.tire-ind {
-            width: auto; height: auto;
-            border-radius: 10px;
-            padding: 2px 6px;
-            font-size: 11px;
+          .vi-dot.ok { background: var(--ccc-ok, #4caf50); }
+          .vi-dot.alert { background: var(--ccc-warning, #ff9800); }
+          .vi-label {
+            font-size: 0.9em;
+            opacity: 0.85;
+          }
+          .vi-tire-val {
             font-weight: 700;
+            font-size: 1em;
           }
-
-          /* Door indicators – tight to vehicle sides */
-          .ind-door-fl { top: 32%; left: 22%; }
-          .ind-door-fr { top: 32%; right: 22%; }
-          .ind-door-rl { top: 52%; left: 22%; }
-          .ind-door-rr { top: 52%; right: 22%; }
-
-          /* Window indicators – slightly above doors, inward */
-          .ind-win-fl { top: 26%; left: 28%; }
-          .ind-win-fr { top: 26%; right: 28%; }
-          .ind-win-rl { top: 46%; left: 28%; }
-          .ind-win-rr { top: 46%; right: 28%; }
-
-          /* Moonroof indicator – top center */
-          .ind-moonroof { top: 20%; left: 50%; transform: translateX(-50%); }
-
-          /* Lock indicators – just below doors */
-          .ind-lock-fl { top: 38%; left: 22%; }
-          .ind-lock-fr { top: 38%; right: 22%; }
-          .ind-lock-rl { top: 58%; left: 22%; }
-          .ind-lock-rr { top: 58%; right: 22%; }
-
-          /* Tire indicators – at wheel positions */
-          .ind-tire-fl { top: 18%; left: 18%; }
-          .ind-tire-fr { top: 18%; right: 18%; }
-          .ind-tire-rl { top: 70%; left: 18%; }
-          .ind-tire-rr { top: 70%; right: 18%; }
         </style>
 
         <div class="header">
