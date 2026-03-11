@@ -1792,12 +1792,12 @@ const ENTITY_KEYS = [
   { key: "trunk_door_lock", label: "Trunk Lock", section: "Locks", domain: "binary_sensor" },
 ];
 
-// ── Visual card editor ──
+// ── Visual card editor (no shadow DOM – HA pickers need light DOM) ──
 class ToyotaCarCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { ...config };
     if (!this._config.entities) this._config.entities = {};
-    if (this._hass) this._buildEditor();
+    this._buildEditor();
   }
 
   set hass(hass) {
@@ -1833,88 +1833,83 @@ class ToyotaCarCardEditor extends HTMLElement {
 
   _buildEditor() {
     if (!this._hass || !this._config) return;
-    // Only build the DOM once; after that just update values
+
+    // Only build the DOM once; after that just update picker values
     if (this._editorBuilt) {
-      this._updatePickerValues();
+      this._syncPickers();
       return;
     }
     this._editorBuilt = true;
 
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: "open" });
-    }
+    // Use light DOM so HA components render correctly
+    this.innerHTML = "";
 
-    const root = this.shadowRoot;
-    root.innerHTML = "";
-
+    // Inject scoped styles
     const style = document.createElement("style");
     style.textContent = `
-      .card-config {
-        padding: 16px;
-      }
-      .section {
-        margin-top: 24px;
-      }
-      .section-title {
-        font-size: 0.9em;
-        font-weight: 500;
+      .tcc-editor { padding: 16px; }
+      .tcc-editor .tcc-section { margin-top: 24px; }
+      .tcc-editor .tcc-section-title {
+        font-size: 0.9em; font-weight: 500;
         color: var(--primary-text-color);
-        margin-bottom: 8px;
-        padding-bottom: 4px;
+        margin-bottom: 8px; padding-bottom: 4px;
         border-bottom: 1px solid var(--divider-color, #e0e0e0);
       }
-      .entity-row {
-        margin-bottom: 8px;
+      .tcc-editor .tcc-entity-row { margin-bottom: 8px; }
+      .tcc-editor .tcc-toggle-row {
+        display: flex; align-items: center;
+        justify-content: space-between; padding: 4px 0;
       }
-      .toggle-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 4px 0;
+      .tcc-editor .tcc-toggle-row span {
+        font-size: 0.9em; color: var(--primary-text-color);
       }
-      .toggle-row span {
-        font-size: 0.9em;
-        color: var(--primary-text-color);
+      .tcc-editor ha-textfield { display: block; margin-bottom: 12px; }
+      .tcc-editor ha-entity-picker { display: block; }
+      .tcc-editor .tcc-group-header {
+        display: flex; align-items: center; cursor: pointer;
+        padding: 10px 0 6px; user-select: none;
       }
-      ha-textfield {
-        display: block;
-        margin-bottom: 12px;
+      .tcc-editor .tcc-group-header .tcc-arrow {
+        display: inline-block; width: 0; height: 0;
+        border-left: 5px solid transparent; border-right: 5px solid transparent;
+        border-top: 6px solid var(--primary-text-color);
+        margin-right: 8px; transition: transform 0.2s;
       }
-      ha-entity-picker {
-        display: block;
+      .tcc-editor .tcc-group-header.open .tcc-arrow { transform: rotate(0deg); }
+      .tcc-editor .tcc-group-header:not(.open) .tcc-arrow { transform: rotate(-90deg); }
+      .tcc-editor .tcc-group-header span {
+        font-weight: 500; font-size: 0.88em;
+        text-transform: uppercase; letter-spacing: 0.4px;
+        color: var(--primary-color, #03a9f4);
       }
-      ha-expansion-panel {
-        margin-top: 8px;
-      }
+      .tcc-editor .tcc-group-body { padding: 0 0 4px 4px; }
+      .tcc-editor .tcc-group-body.collapsed { display: none; }
     `;
-    root.appendChild(style);
+    this.appendChild(style);
 
     const container = document.createElement("div");
-    container.className = "card-config";
-    root.appendChild(container);
+    container.className = "tcc-editor";
+    this.appendChild(container);
 
-    // Title
+    // ── Title ──
     const titleField = document.createElement("ha-textfield");
     titleField.label = "Title";
     titleField.value = this._config.title || "";
-    titleField.configValue = "title";
-    titleField.addEventListener("input", (e) => {
-      this._updateConfig("title", e.target.value);
-    });
+    titleField.addEventListener("input", (e) =>
+      this._updateConfig("title", e.target.value)
+    );
     container.appendChild(titleField);
 
-    // Image URL
+    // ── Image URL ──
     const imageField = document.createElement("ha-textfield");
     imageField.label = "Vehicle Image URL (optional)";
     imageField.value = this._config.image_url || "";
-    imageField.helper = "Use /local/your-car.png or an https:// URL";
-    imageField.configValue = "image_url";
-    imageField.addEventListener("input", (e) => {
-      this._updateConfig("image_url", e.target.value);
-    });
+    imageField.addEventListener("input", (e) =>
+      this._updateConfig("image_url", e.target.value)
+    );
     container.appendChild(imageField);
 
-    // Toggle switches
+    // ── Toggles ──
     const toggles = [
       { key: "show_fuel", label: "Show Fuel Level", defaultOn: true },
       { key: "show_odometer", label: "Show Odometer", defaultOn: true },
@@ -1928,92 +1923,96 @@ class ToyotaCarCardEditor extends HTMLElement {
     ];
 
     const toggleSection = document.createElement("div");
-    toggleSection.className = "section";
+    toggleSection.className = "tcc-section";
     const toggleTitle = document.createElement("div");
-    toggleTitle.className = "section-title";
+    toggleTitle.className = "tcc-section-title";
     toggleTitle.textContent = "Visibility";
     toggleSection.appendChild(toggleTitle);
 
     for (const toggle of toggles) {
       const row = document.createElement("div");
-      row.className = "toggle-row";
-
-      const label = document.createElement("span");
-      label.textContent = toggle.label;
-      row.appendChild(label);
+      row.className = "tcc-toggle-row";
+      const lbl = document.createElement("span");
+      lbl.textContent = toggle.label;
+      row.appendChild(lbl);
 
       const sw = document.createElement("ha-switch");
       const isOn = toggle.defaultOn
         ? this._config[toggle.key] !== false
         : this._config[toggle.key] === true;
       if (isOn) sw.setAttribute("checked", "");
-      sw.addEventListener("change", (e) => {
-        this._updateConfig(toggle.key, e.target.checked);
-      });
+      sw.addEventListener("change", (e) =>
+        this._updateConfig(toggle.key, e.target.checked)
+      );
       row.appendChild(sw);
-
       toggleSection.appendChild(row);
     }
     container.appendChild(toggleSection);
 
-    // Entity picker sections
-    const sections = {};
+    // ── Entity pickers grouped by section ──
+    const sectionMap = {};
     for (const def of ENTITY_KEYS) {
-      if (!sections[def.section]) sections[def.section] = [];
-      sections[def.section].push(def);
+      if (!sectionMap[def.section]) sectionMap[def.section] = [];
+      sectionMap[def.section].push(def);
     }
 
     const entitiesSection = document.createElement("div");
-    entitiesSection.className = "section";
+    entitiesSection.className = "tcc-section";
     const entitiesTitle = document.createElement("div");
-    entitiesTitle.className = "section-title";
+    entitiesTitle.className = "tcc-section-title";
     entitiesTitle.textContent = "Entities";
     entitiesSection.appendChild(entitiesTitle);
 
     this._entityPickers = {};
 
-    for (const [sectionName, defs] of Object.entries(sections)) {
-      const panel = document.createElement("ha-expansion-panel");
-      panel.header = sectionName;
-      panel.outlined = true;
+    for (const [sectionName, defs] of Object.entries(sectionMap)) {
+      // Collapsible group header
+      const header = document.createElement("div");
+      header.className = "tcc-group-header open";
+      header.innerHTML = `<div class="tcc-arrow"></div><span>${sectionName}</span>`;
 
-      const panelContent = document.createElement("div");
-      panelContent.style.padding = "0 12px 12px";
+      const body = document.createElement("div");
+      body.className = "tcc-group-body";
+
+      header.addEventListener("click", () => {
+        const isOpen = header.classList.toggle("open");
+        body.classList.toggle("collapsed", !isOpen);
+      });
 
       for (const def of defs) {
         const row = document.createElement("div");
-        row.className = "entity-row";
+        row.className = "tcc-entity-row";
 
         const picker = document.createElement("ha-entity-picker");
         picker.hass = this._hass;
         picker.value = (this._config.entities || {})[def.key] || "";
         picker.label = def.label;
+        picker.setAttribute("allow-custom-entity", "");
+        // Filter by domain
         picker.includeDomains = [def.domain];
-        picker.allowCustomEntity = true;
         picker.addEventListener("value-changed", (e) => {
+          e.stopPropagation();
           this._updateEntity(def.key, e.detail.value || "");
         });
 
         this._entityPickers[def.key] = picker;
         row.appendChild(picker);
-        panelContent.appendChild(row);
+        body.appendChild(row);
       }
 
-      panel.appendChild(panelContent);
-      entitiesSection.appendChild(panel);
+      entitiesSection.appendChild(header);
+      entitiesSection.appendChild(body);
     }
 
     container.appendChild(entitiesSection);
   }
 
-  _updatePickerValues() {
+  _syncPickers() {
     if (!this._entityPickers) return;
     for (const [key, picker] of Object.entries(this._entityPickers)) {
       picker.hass = this._hass;
       const val = (this._config.entities || {})[key] || "";
-      if (picker.value !== val) {
-        picker.value = val;
-      }
+      if (picker.value !== val) picker.value = val;
     }
   }
 }
