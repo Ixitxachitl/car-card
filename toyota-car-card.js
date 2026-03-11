@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.12.4";
+const CARD_VERSION = "1.12.5";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1487,8 +1487,7 @@ class ToyotaCarCard extends HTMLElement {
     // One-time: create persistent card structure (CSS + map container never destroyed)
     if (!this.shadowRoot.querySelector("ha-card")) {
       this.shadowRoot.innerHTML = `
-        <ha-card>
-          <style>
+        <style>
           :host {
             --ccc-ok: #4caf50;
             --ccc-warning: #ff9800;
@@ -1740,10 +1739,11 @@ class ToyotaCarCard extends HTMLElement {
             background: var(--ccc-critical, #f44336);
             color: #fff;
           }
-          </style>
+        </style>
+        <ha-card>
             <div id="card-content"></div>
             <div id="card-map"></div>
-          </ha-card>
+        </ha-card>
         `;
     }
 
@@ -1819,9 +1819,9 @@ class ToyotaCarCard extends HTMLElement {
               const engEnt = this._config.engine_status_entity;
               const engState = engEnt ? this._getState(engEnt) : null;
               const running = engState && engState.state === "on";
-              const vin = this._config.vehicle;
-              if (!vin) return;
-              this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", { vehicle: vin });
+              const deviceId = this._config.vehicle;
+              if (!deviceId) return;
+              this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", { device_id: deviceId });
             }
           });
         });
@@ -2138,19 +2138,10 @@ class ToyotaCarCardEditor extends HTMLElement {
     engineHint.textContent = "Engine button toggles between toyota_na.engine_start and toyota_na.engine_stop based on the status entity.";
     actContent.appendChild(engineHint);
 
-    // VIN / vehicle — ha-form with device selector
+    // Vehicle device picker
     actContent.appendChild(this._makeFormDevicePicker(
       "Vehicle", this._config.vehicle || "",
-      (val) => {
-        // Resolve VIN from device identifiers
-        let vin = val;
-        if (val && this._hass && this._hass.devices && this._hass.devices[val]) {
-          const dev = this._hass.devices[val];
-          const toyotaId = dev.identifiers && dev.identifiers.find((ids) => ids[0] === "toyota_na");
-          if (toyotaId) vin = toyotaId[1];
-        }
-        this._updateConfig("vehicle", vin || null);
-      }
+      (val) => this._updateConfig("vehicle", val || null)
     ));
 
     const vinHint = document.createElement("div");
