@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.4.0";
+const CARD_VERSION = "1.5.0";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1324,11 +1324,77 @@ class ToyotaCarCard extends HTMLElement {
     };
 
     // Build HTML
-    const imageSection = this._config.image_url
-      ? `<div class="car-image">
-           <img src="${this._encodeImageUrl(this._config.image_url)}" alt="Vehicle" />
-         </div>`
-      : `<div class="car-image">${TRUCK_SVG}</div>`;
+    const vehicleImg = this._config.image_url
+      ? `<img src="${this._encodeImageUrl(this._config.image_url)}" alt="Vehicle" />`
+      : TRUCK_SVG;
+
+    // Build overlay indicators on the vehicle image
+    const doorIndicator = (state, label, cssClass) => {
+      if (state === null) return "";
+      const isOpen = state === "on";
+      const color = isOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
+      const icon = isOpen ? "mdi:car-door" : "mdi:car-door";
+      return `<div class="vehicle-indicator ${cssClass}" style="color: ${color};" title="${label}: ${isOpen ? "Open" : "Closed"}">
+        <ha-icon icon="${icon}" style="--mdc-icon-size: 18px;"></ha-icon>
+      </div>`;
+    };
+
+    const windowIndicator = (state, label, cssClass) => {
+      if (state === null) return "";
+      const isOpen = state === "on";
+      const color = isOpen ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
+      return `<div class="vehicle-indicator ${cssClass}" style="color: ${color};" title="${label}: ${isOpen ? "Open" : "Closed"}">
+        <ha-icon icon="mdi:car-windshield-outline" style="--mdc-icon-size: 16px;"></ha-icon>
+      </div>`;
+    };
+
+    const lockIndicator = (state, label, cssClass) => {
+      if (state === null) return "";
+      const isUnlocked = state === "on";
+      const color = isUnlocked ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
+      const icon = isUnlocked ? "mdi:lock-open-variant" : "mdi:lock";
+      return `<div class="vehicle-indicator ${cssClass}" style="color: ${color};" title="${label}: ${isUnlocked ? "Unlocked" : "Locked"}">
+        <ha-icon icon="${icon}" style="--mdc-icon-size: 16px;"></ha-icon>
+      </div>`;
+    };
+
+    const tireIndicator = (val, label, cssClass) => {
+      if (val === null) return "";
+      return `<div class="vehicle-indicator tire-ind ${cssClass}" style="color: ${tireColor(val)};" title="${label}: ${val} psi">
+        <span>${this._formatNumber(val)}</span>
+      </div>`;
+    };
+
+    let overlays = "";
+    if (this._config.show_doors !== false) {
+      overlays += doorIndicator(this._getStateValue(doorFL), "Front Driver Door", "ind-door-fl");
+      overlays += doorIndicator(this._getStateValue(doorFR), "Front Passenger Door", "ind-door-fr");
+      overlays += doorIndicator(this._getStateValue(doorRL), "Rear Driver Door", "ind-door-rl");
+      overlays += doorIndicator(this._getStateValue(doorRR), "Rear Passenger Door", "ind-door-rr");
+    }
+    if (this._config.show_windows !== false) {
+      overlays += windowIndicator(this._getStateValue(winFL), "Front Driver Window", "ind-win-fl");
+      overlays += windowIndicator(this._getStateValue(winFR), "Front Passenger Window", "ind-win-fr");
+      overlays += windowIndicator(this._getStateValue(winRL), "Rear Driver Window", "ind-win-rl");
+      overlays += windowIndicator(this._getStateValue(winRR), "Rear Passenger Window", "ind-win-rr");
+    }
+    if (this._config.show_locks !== false) {
+      overlays += lockIndicator(this._getStateValue(lockFL), "Front Driver Lock", "ind-lock-fl");
+      overlays += lockIndicator(this._getStateValue(lockFR), "Front Passenger Lock", "ind-lock-fr");
+      overlays += lockIndicator(this._getStateValue(lockRL), "Rear Driver Lock", "ind-lock-rl");
+      overlays += lockIndicator(this._getStateValue(lockRR), "Rear Passenger Lock", "ind-lock-rr");
+    }
+    if (this._config.show_tires !== false) {
+      overlays += tireIndicator(flTire, "Front Driver Tire", "ind-tire-fl");
+      overlays += tireIndicator(frTire, "Front Passenger Tire", "ind-tire-fr");
+      overlays += tireIndicator(rlTire, "Rear Driver Tire", "ind-tire-rl");
+      overlays += tireIndicator(rrTire, "Rear Passenger Tire", "ind-tire-rr");
+    }
+
+    const imageSection = `<div class="car-image-container">
+      <div class="car-image">${vehicleImg}</div>
+      ${overlays}
+    </div>`;
 
     const fuelSection =
       this._config.show_fuel && fuel !== null
@@ -1687,6 +1753,59 @@ class ToyotaCarCard extends HTMLElement {
             color: var(--primary-text-color);
             opacity: 0.7;
           }
+
+          /* Vehicle overlay indicators */
+          .car-image-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            margin: 8px 0 16px 0;
+          }
+          .car-image-container .car-image {
+            margin: 0;
+          }
+          .vehicle-indicator {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: var(--card-background-color, #fff);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            z-index: 2;
+          }
+          .vehicle-indicator.tire-ind {
+            width: auto; height: auto;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 700;
+          }
+
+          /* Door indicators – along left/right sides of vehicle */
+          .ind-door-fl { top: 30%; left: 5%; }
+          .ind-door-fr { top: 30%; right: 5%; }
+          .ind-door-rl { top: 52%; left: 5%; }
+          .ind-door-rr { top: 52%; right: 5%; }
+
+          /* Window indicators – slightly inward from doors */
+          .ind-win-fl { top: 22%; left: 14%; }
+          .ind-win-fr { top: 22%; right: 14%; }
+          .ind-win-rl { top: 44%; left: 14%; }
+          .ind-win-rr { top: 44%; right: 14%; }
+
+          /* Lock indicators – below doors */
+          .ind-lock-fl { top: 38%; left: 5%; }
+          .ind-lock-fr { top: 38%; right: 5%; }
+          .ind-lock-rl { top: 60%; left: 5%; }
+          .ind-lock-rr { top: 60%; right: 5%; }
+
+          /* Tire indicators – at corners */
+          .ind-tire-fl { top: 15%; left: 2%; }
+          .ind-tire-fr { top: 15%; right: 2%; }
+          .ind-tire-rl { top: 72%; left: 2%; }
+          .ind-tire-rr { top: 72%; right: 2%; }
         </style>
 
         <div class="header">
@@ -1936,7 +2055,6 @@ class ToyotaCarCardEditor extends HTMLElement {
           margin-top: 12px;
           border: 1px solid var(--divider-color, #e0e0e0);
           border-radius: 10px;
-          overflow: hidden;
         }
         .entity-section-header {
           display: flex;
@@ -2002,16 +2120,14 @@ class ToyotaCarCardEditor extends HTMLElement {
           line-height: 1;
         }
         .dropdown {
-          position: absolute;
-          z-index: 999;
-          left: 0; right: 0;
+          position: fixed;
+          z-index: 9999;
           max-height: 200px;
           overflow-y: auto;
           background: var(--card-background-color, #fff);
           border: 1px solid var(--divider-color, #e0e0e0);
-          border-top: none;
           border-radius: 0 0 8px 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.2);
         }
         .dropdown .dd-item {
           padding: 8px 12px;
@@ -2191,6 +2307,24 @@ class ToyotaCarCardEditor extends HTMLElement {
     const allEntities = this._getEntities(domain);
     let activeIdx = -1;
 
+    const positionDropdown = () => {
+      const rect = input.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const dropHeight = Math.min(200, dropdown.scrollHeight || 200);
+      dropdown.style.left = rect.left + "px";
+      dropdown.style.width = rect.width + "px";
+      if (spaceBelow >= dropHeight || spaceBelow >= spaceAbove) {
+        dropdown.style.top = rect.bottom + "px";
+        dropdown.style.bottom = "auto";
+        dropdown.style.borderRadius = "0 0 8px 8px";
+      } else {
+        dropdown.style.bottom = (window.innerHeight - rect.top) + "px";
+        dropdown.style.top = "auto";
+        dropdown.style.borderRadius = "8px 8px 0 0";
+      }
+    };
+
     const showDropdown = (filter) => {
       const q = (filter || "").toLowerCase();
       const matches = q
@@ -2216,6 +2350,7 @@ class ToyotaCarCardEditor extends HTMLElement {
       }
       activeIdx = -1;
       dropdown.style.display = "block";
+      positionDropdown();
     };
 
     input.addEventListener("focus", () => showDropdown(input.value));
@@ -2251,7 +2386,8 @@ class ToyotaCarCardEditor extends HTMLElement {
 
     wrap.appendChild(input);
     wrap.appendChild(clearBtn);
-    wrap.appendChild(dropdown);
+    // Append dropdown to shadow root so it's not clipped by parent overflow
+    this.shadowRoot.appendChild(dropdown);
     row.appendChild(wrap);
     return row;
   }
