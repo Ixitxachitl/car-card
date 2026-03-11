@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.12.7";
+const CARD_VERSION = "1.12.8";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
