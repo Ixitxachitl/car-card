@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.12.3";
+const CARD_VERSION = "1.12.4";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1490,8 +1490,6 @@ class ToyotaCarCard extends HTMLElement {
         <ha-card>
           <style>
           :host {
-            display: block;
-            height: auto !important;
             --ccc-ok: #4caf50;
             --ccc-warning: #ff9800;
             --ccc-critical: #f44336;
@@ -1955,20 +1953,19 @@ const ENTITY_KEYS = [
 class ToyotaCarCardEditor extends HTMLElement {
   constructor() {
     super();
-    this._pickers = [];
+    this.attachShadow({ mode: "open" });
+    this._forms = [];
   }
 
   setConfig(config) {
-    this._config = { ...config };
+    this._config = JSON.parse(JSON.stringify(config || {}));
     if (!this._config.entities) this._config.entities = {};
-    this._rendered = false;
-    if (this._hass) this._render();
+    this._build();
   }
 
   set hass(hass) {
     this._hass = hass;
-    for (const p of this._pickers) p.hass = hass;
-    if (this._config && !this._rendered) this._render();
+    for (const f of this._forms) f.hass = hass;
   }
 
   _fireChanged() {
@@ -1982,162 +1979,107 @@ class ToyotaCarCardEditor extends HTMLElement {
   }
 
   _updateConfig(key, value) {
-    this._config = { ...this._config, [key]: value };
+    if (value === null || value === undefined || value === "") {
+      delete this._config[key];
+    } else {
+      this._config[key] = value;
+    }
     this._fireChanged();
   }
 
   _updateEntity(key, value) {
-    const entities = { ...(this._config.entities || {}) };
-    if (value) entities[key] = value;
-    else delete entities[key];
-    this._config = { ...this._config, entities };
+    if (!this._config.entities) this._config.entities = {};
+    if (value) this._config.entities[key] = value;
+    else delete this._config.entities[key];
     this._fireChanged();
   }
 
-  _render() {
-    if (!this._hass || !this._config) return;
-    this._rendered = true;
+  _build() {
+    const root = this.shadowRoot;
+    root.innerHTML = "";
+    this._forms = [];
 
-    const entities = this._config.entities || {};
-    const root = this;
-
-    root.innerHTML = `
-      <style>
-        .tcc-editor {
-          padding: 16px;
-          font-family: var(--paper-font-body1_-_font-family, "Roboto", sans-serif);
-          font-size: 14px;
-          color: var(--primary-text-color, #212121);
-        }
-
-        /* Text inputs */
-        .tcc-editor .field { margin-bottom: 16px; }
-        .tcc-editor .field label {
-          display: block;
-          font-size: 12px;
-          font-weight: 500;
-          color: var(--secondary-text-color, #727272);
-          margin-bottom: 6px;
-        }
-        .tcc-editor .tcc-editor .field input[type="text"] {
-          width: 100%;
-          box-sizing: border-box;
-          padding: 10px 12px;
-          font-size: 14px;
-          border: 1px solid var(--divider-color, #e0e0e0);
-          border-radius: 8px;
-          background: var(--card-background-color, #fff);
-          color: var(--primary-text-color, #212121);
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .tcc-editor .field input[type="text"]:focus {
-          border-color: var(--primary-color, #03a9f4);
-        }
-        .tcc-editor .tcc-editor .field .hint {
-          font-size: 11px;
-          color: var(--secondary-text-color, #727272);
-          margin-top: 4px;
-        }
-
-        /* Toggles */
-        .tcc-editor .section { margin-top: 24px; }
-        .tcc-editor .tcc-editor .section-title {
-          font-size: 13px;
-          font-weight: 600;
-          color: var(--primary-text-color);
-          margin-bottom: 12px;
-          padding-bottom: 6px;
-          border-bottom: 1px solid var(--divider-color, #e0e0e0);
-        }
-        .tcc-editor .tcc-editor .toggle-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 8px 0;
-        }
-        .tcc-editor .toggle-row label {
-          font-size: 14px;
-          color: var(--primary-text-color);
-        }
-        /* Custom toggle switch */
-        .tcc-editor .tcc-editor .switch {
-          position: relative;
-          width: 40px; height: 22px;
-          cursor: pointer;
-        }
-        .tcc-editor .switch input { display: none; }
-        .tcc-editor .switch .slider {
-          position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-          background: var(--disabled-text-color, #bdbdbd);
-          border-radius: 12px; transition: background 0.2s;
-        }
-        .tcc-editor .tcc-editor .switch .slider::before {
-          content: ""; position: absolute;
-          width: 18px; height: 18px; left: 2px; bottom: 2px;
-          background: #fff; border-radius: 50%; transition: transform 0.2s;
-        }
-        .tcc-editor .switch input:checked + .slider {
-          background: var(--primary-color, #03a9f4);
-        }
-        .tcc-editor .tcc-editor .switch input:checked + .slider::before {
-          transform: translateX(18px);
-        }
-
-        /* Entity picker */
-        .tcc-editor .tcc-editor .entity-section {
-          margin-top: 12px;
-          border: 1px solid var(--divider-color, #e0e0e0);
-          border-radius: 10px;
-        }
-        .tcc-editor .tcc-editor .entity-section-header {
-          display: flex;
-          align-items: center;
-          padding: 10px 14px;
-          cursor: pointer;
-          user-select: none;
-          background: var(--secondary-background-color, #f5f5f5);
-          font-weight: 500;
-          font-size: 13px;
-          color: var(--primary-text-color);
-        }
-        .tcc-editor .tcc-editor .entity-section-header .chevron {
-          margin-right: 10px;
-          transition: transform 0.2s;
-          font-size: 10px;
-        }
-        .tcc-editor .entity-section-header.collapsed .chevron {
-          transform: rotate(-90deg);
-        }
-        .tcc-editor .entity-section-body {
-          padding: 8px 14px 14px;
-        }
-        .tcc-editor .entity-section-body.hidden { display: none; }
-
-        .tcc-editor .entity-row {
-          margin-bottom: 12px;
-        }
-        .tcc-editor .tcc-editor .entity-row label {
-          display: block;
-          font-size: 12px;
-          font-weight: 500;
-          color: var(--secondary-text-color, #727272);
-          margin-bottom: 4px;
-        }
-      </style>
-      <div class="tcc-editor" id="editor-root"></div>
+    const style = document.createElement("style");
+    style.textContent = `
+      :host { display: block; }
+      .editor {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; }
+      .field ha-textfield { width: 100%; }
+      .hint {
+        font-size: 11px;
+        color: var(--secondary-text-color, #727272);
+        padding: 0 16px;
+      }
+      .section { margin-top: 8px; }
+      .section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--primary-text-color);
+        margin-bottom: 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--divider-color, #e0e0e0);
+      }
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+      }
+      .toggle-row label {
+        font-size: 14px;
+        color: var(--primary-text-color);
+      }
+      .switch {
+        position: relative;
+        width: 40px; height: 22px;
+        cursor: pointer;
+      }
+      .switch input { display: none; }
+      .switch .slider {
+        position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+        background: var(--disabled-text-color, #bdbdbd);
+        border-radius: 12px; transition: background 0.2s;
+      }
+      .switch .slider::before {
+        content: ""; position: absolute;
+        width: 18px; height: 18px; left: 2px; bottom: 2px;
+        background: #fff; border-radius: 50%; transition: transform 0.2s;
+      }
+      .switch input:checked + .slider {
+        background: var(--primary-color, #03a9f4);
+      }
+      .switch input:checked + .slider::before {
+        transform: translateX(18px);
+      }
+      ha-expansion-panel {
+        display: block;
+      }
+      .section-content {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 8px 0;
+      }
+      ha-form { width: 100%; }
     `;
+    root.appendChild(style);
 
-    const editorRoot = root.querySelector("#editor-root");
+    const editor = document.createElement("div");
+    editor.className = "editor";
 
     // ── Title field ──
-    editorRoot.appendChild(this._makeTextField(
+    editor.appendChild(this._makeTextField(
       "Title", this._config.title || "", null,
       (val) => this._updateConfig("title", val)
     ));
 
     // ── Image URL field ──
-    editorRoot.appendChild(this._makeTextField(
+    editor.appendChild(this._makeTextField(
       "Vehicle Image URL", this._config.image_url || "",
       "Use /local/your-car.png or an https:// URL",
       (val) => this._updateConfig("image_url", val)
@@ -2170,67 +2112,57 @@ class ToyotaCarCardEditor extends HTMLElement {
         this._updateConfig(t.key, checked);
       }));
     }
-    editorRoot.appendChild(toggleSection);
+    editor.appendChild(toggleSection);
 
     // ── Action button entities ──
-    const actSection = document.createElement("div");
-    actSection.className = "section";
-    actSection.innerHTML = '<div class="section-title">Action Buttons</div>';
+    const actPanel = document.createElement("ha-expansion-panel");
+    actPanel.outlined = true;
+    actPanel.header = "Action Buttons";
+    actPanel.expanded = true;
 
-    actSection.appendChild(this._makeEntityPicker(
-      "Lock Entity (lock domain)", "lock", this._config.lock_entity || "",
+    const actContent = document.createElement("div");
+    actContent.className = "section-content";
+
+    actContent.appendChild(this._makeFormPicker(
+      "Lock Entity", "lock", this._config.lock_entity || "",
       (val) => this._updateConfig("lock_entity", val)
     ));
 
-    actSection.appendChild(this._makeEntityPicker(
-      "Engine Status Entity (binary_sensor)", "binary_sensor", this._config.engine_status_entity || "",
+    actContent.appendChild(this._makeFormPicker(
+      "Engine Status Entity", "binary_sensor", this._config.engine_status_entity || "",
       (val) => this._updateConfig("engine_status_entity", val)
     ));
 
     const engineHint = document.createElement("div");
-    engineHint.style.cssText = "font-size: 12px; color: var(--secondary-text-color, #727272); margin-top: 4px;";
+    engineHint.className = "hint";
     engineHint.textContent = "Engine button toggles between toyota_na.engine_start and toyota_na.engine_stop based on the status entity.";
-    actSection.appendChild(engineHint);
+    actContent.appendChild(engineHint);
 
-    // VIN / vehicle identifier — HA native device picker
-    const vinWrap = document.createElement("div");
-    vinWrap.className = "entity-row";
-    const vinLabel = document.createElement("label");
-    vinLabel.textContent = "Vehicle";
-    vinWrap.appendChild(vinLabel);
-
-    const devPicker = document.createElement("ha-device-picker");
-    devPicker.hass = this._hass;
-    devPicker.value = this._config.vehicle || "";
-    devPicker.label = "Vehicle (toyota_na)";
-    devPicker.includeIntegrations = ["toyota_na"];
-    devPicker.addEventListener("value-changed", (e) => {
-      const deviceId = e.detail.value || "";
-      // Resolve VIN from device identifiers
-      let vin = deviceId;
-      if (deviceId && this._hass && this._hass.devices && this._hass.devices[deviceId]) {
-        const dev = this._hass.devices[deviceId];
-        const toyotaId = dev.identifiers && dev.identifiers.find((ids) => ids[0] === "toyota_na");
-        if (toyotaId) vin = toyotaId[1];
+    // VIN / vehicle — ha-form with device selector
+    actContent.appendChild(this._makeFormDevicePicker(
+      "Vehicle", this._config.vehicle || "",
+      (val) => {
+        // Resolve VIN from device identifiers
+        let vin = val;
+        if (val && this._hass && this._hass.devices && this._hass.devices[val]) {
+          const dev = this._hass.devices[val];
+          const toyotaId = dev.identifiers && dev.identifiers.find((ids) => ids[0] === "toyota_na");
+          if (toyotaId) vin = toyotaId[1];
+        }
+        this._updateConfig("vehicle", vin || null);
       }
-      this._updateConfig("vehicle", vin || null);
-    });
-    vinWrap.appendChild(devPicker);
-    this._pickers.push(devPicker);
+    ));
 
     const vinHint = document.createElement("div");
-    vinHint.style.cssText = "font-size: 11px; color: var(--secondary-text-color, #727272); margin-top: 2px;";
+    vinHint.className = "hint";
     vinHint.textContent = "Required for engine start/stop and other toyota_na actions.";
-    vinWrap.appendChild(vinHint);
-    actSection.appendChild(vinWrap);
+    actContent.appendChild(vinHint);
 
-    editorRoot.appendChild(actSection);
+    actPanel.appendChild(actContent);
+    editor.appendChild(actPanel);
 
     // ── Entities ──
-    const entSection = document.createElement("div");
-    entSection.className = "section";
-    entSection.innerHTML = '<div class="section-title">Entities</div>';
-
+    const entities = this._config.entities || {};
     const sectionMap = {};
     for (const def of ENTITY_KEYS) {
       if (!sectionMap[def.section]) sectionMap[def.section] = [];
@@ -2238,48 +2170,46 @@ class ToyotaCarCardEditor extends HTMLElement {
     }
 
     for (const [sectionName, defs] of Object.entries(sectionMap)) {
-      const sec = document.createElement("div");
-      sec.className = "entity-section";
+      const panel = document.createElement("ha-expansion-panel");
+      panel.outlined = true;
+      panel.header = sectionName;
 
-      const header = document.createElement("div");
-      header.className = "entity-section-header";
-      header.innerHTML = `<span class="chevron">&#9660;</span>${sectionName}`;
-
-      const body = document.createElement("div");
-      body.className = "entity-section-body";
-
-      header.addEventListener("click", () => {
-        header.classList.toggle("collapsed");
-        body.classList.toggle("hidden");
-      });
+      const content = document.createElement("div");
+      content.className = "section-content";
 
       for (const def of defs) {
-        body.appendChild(this._makeEntityPicker(
+        content.appendChild(this._makeFormPicker(
           def.label, def.domain, entities[def.key] || "",
           (val) => this._updateEntity(def.key, val)
         ));
       }
 
-      sec.appendChild(header);
-      sec.appendChild(body);
-      entSection.appendChild(sec);
+      panel.appendChild(content);
+      editor.appendChild(panel);
     }
-    editorRoot.appendChild(entSection);
+
+    root.appendChild(editor);
+
+    // Nudge forms once HA finishes upgrading them
+    queueMicrotask(() => {
+      for (const f of this._forms) {
+        if (this._hass) f.hass = this._hass;
+      }
+    });
   }
 
   _makeTextField(label, value, hint, onChange) {
     const wrap = document.createElement("div");
     wrap.className = "field";
-    const lbl = document.createElement("label");
-    lbl.textContent = label;
-    wrap.appendChild(lbl);
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = value;
-    input.addEventListener("change", (e) => onChange(e.target.value));
-    wrap.appendChild(input);
+    const tf = document.createElement("ha-textfield");
+    tf.label = label;
+    tf.value = value || "";
+    const commit = () => onChange(tf.value || "");
+    tf.addEventListener("change", commit);
+    tf.addEventListener("blur", commit);
+    wrap.appendChild(tf);
     if (hint) {
-      const h = document.createElement("div");
+      const h = document.createElement("span");
       h.className = "hint";
       h.textContent = hint;
       wrap.appendChild(h);
@@ -2307,29 +2237,38 @@ class ToyotaCarCardEditor extends HTMLElement {
     return row;
   }
 
-  _makeEntityPicker(label, domain, currentValue, onChange) {
-    const row = document.createElement("div");
-    row.className = "entity-row";
-
-    const lbl = document.createElement("label");
-    lbl.textContent = label;
-    row.appendChild(lbl);
-
-    const picker = document.createElement("ha-entity-picker");
-    picker.hass = this._hass;
-    picker.value = currentValue || "";
-    picker.label = label;
-    if (domain) {
-      picker.includeDomains = [domain];
-    }
-    picker.allowCustomEntity = true;
-    picker.addEventListener("value-changed", (e) => {
-      onChange(e.detail.value || "");
+  _makeFormPicker(label, domain, currentValue, onChange) {
+    const form = document.createElement("ha-form");
+    form.schema = [{ name: "entity", selector: { entity: domain ? { domain } : {} } }];
+    form.data = { entity: currentValue || "" };
+    form.computeLabel = () => label;
+    form.computeHelper = () => "";
+    if (this._hass) form.hass = this._hass;
+    form.addEventListener("value-changed", (e) => {
+      const val = e.detail?.value?.entity || "";
+      if (currentValue === val) return;
+      form.data = { entity: val };
+      onChange(val);
     });
+    this._forms.push(form);
+    return form;
+  }
 
-    row.appendChild(picker);
-    this._pickers.push(picker);
-    return row;
+  _makeFormDevicePicker(label, currentValue, onChange) {
+    const form = document.createElement("ha-form");
+    form.schema = [{ name: "device", selector: { device: { integration: "toyota_na" } } }];
+    form.data = { device: currentValue || "" };
+    form.computeLabel = () => label;
+    form.computeHelper = () => "";
+    if (this._hass) form.hass = this._hass;
+    form.addEventListener("value-changed", (e) => {
+      const val = e.detail?.value?.device || "";
+      if (currentValue === val) return;
+      form.data = { device: val };
+      onChange(val);
+    });
+    this._forms.push(form);
+    return form;
   }
 }
 
