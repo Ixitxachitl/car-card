@@ -4,7 +4,19 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.2.0";
+
+// Force-load HA form elements (they are lazy-loaded by default)
+const _loadHaForm = async () => {
+  if (customElements.get("ha-entity-picker")) return;
+  const helpers = await (window.loadCardHelpers ? window.loadCardHelpers() : undefined);
+  if (helpers) {
+    // Creating an entities card forces HA to import ha-entity-picker
+    const card = await helpers.createCardElement({ type: "entities", entities: [] });
+    if (card) card.constructor;
+  }
+};
+_loadHaForm();
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -2012,14 +2024,16 @@ class ToyotaCarCardEditor extends HTMLElement {
       }
     };
 
-    if (customElements.get("ha-entity-picker")) {
-      // Already defined – still defer one frame so the elements upgrade
-      requestAnimationFrame(() => applyPickerProps());
-    } else {
-      customElements.whenDefined("ha-entity-picker").then(() => {
+    // Ensure the HA form elements are loaded first
+    _loadHaForm().then(() => {
+      if (customElements.get("ha-entity-picker")) {
         requestAnimationFrame(() => applyPickerProps());
-      });
-    }
+      } else {
+        customElements.whenDefined("ha-entity-picker").then(() => {
+          requestAnimationFrame(() => applyPickerProps());
+        });
+      }
+    });
   }
 
   _syncPickers() {
