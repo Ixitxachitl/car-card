@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.12.0";
+const CARD_VERSION = "1.12.1";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1496,7 +1496,7 @@ class ToyotaCarCard extends HTMLElement {
           }
           ha-card {
             padding: 16px;
-            overflow: hidden;
+            overflow: visible;
           }
           .header {
             display: flex;
@@ -1954,17 +1954,33 @@ class ToyotaCarCardEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
+    this._pickers = [];
   }
 
   setConfig(config) {
     this._config = { ...config };
     if (!this._config.entities) this._config.entities = {};
-    if (this._hass) this._render();
+    if (this._hass) this._buildEditor();
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (this._config && !this._rendered) this._render();
+    for (const p of this._pickers) p.hass = hass;
+    if (this._config && !this._rendered) this._buildEditor();
+  }
+
+  async _buildEditor() {
+    if (!this._hass || !this._config) return;
+    if (!customElements.get("ha-entity-picker")) {
+      const helpers = await (window.loadCardHelpers ? window.loadCardHelpers() : undefined);
+      if (helpers) {
+        const t = await helpers.createCardElement({ type: "entities", entities: [] });
+        if (t) t.constructor;
+      }
+      await customElements.whenDefined("ha-entity-picker").catch(() => {});
+    }
+    this._pickers = [];
+    this._render();
   }
 
   _fireChanged() {
@@ -2213,6 +2229,7 @@ class ToyotaCarCardEditor extends HTMLElement {
       this._updateConfig("vehicle", vin || null);
     });
     vinWrap.appendChild(devPicker);
+    this._pickers.push(devPicker);
 
     const vinHint = document.createElement("div");
     vinHint.style.cssText = "font-size: 11px; color: var(--secondary-text-color, #727272); margin-top: 2px;";
@@ -2324,6 +2341,7 @@ class ToyotaCarCardEditor extends HTMLElement {
     });
 
     row.appendChild(picker);
+    this._pickers.push(picker);
     return row;
   }
 }
