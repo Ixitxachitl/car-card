@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.4";
+const CARD_VERSION = "1.10.5";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1692,6 +1692,7 @@ class ToyotaCarCard extends HTMLElement {
           }
           .map-wrap > * {
             height: 100% !important;
+            --ha-card-header-padding: 0;
           }
 
           /* Action buttons */
@@ -1853,6 +1854,7 @@ class ToyotaCarCard extends HTMLElement {
       this._mapCard.style.borderRadius = "0";
       this._mapCard.style.boxShadow = "none";
       this._mapCard.style.setProperty("--ha-card-box-shadow", "none");
+      this._mapCard.style.setProperty("--ha-card-border-radius", "0");
       this._mapCard.hass = this._hass;
 
       // After await, the original container ref may be stale; find the current one
@@ -1861,6 +1863,8 @@ class ToyotaCarCard extends HTMLElement {
       if (currentContainer) {
         currentContainer.innerHTML = "";
         currentContainer.appendChild(this._mapCard);
+        // Force Leaflet to recalculate size so markers center correctly
+        this._invalidateMapSize();
       }
     } catch (e) {
       container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">
@@ -1868,6 +1872,31 @@ class ToyotaCarCard extends HTMLElement {
     } finally {
       this._mapCardLoading = false;
     }
+  }
+
+  _invalidateMapSize() {
+    // The hui-map-card renders ha-map inside its shadow DOM.
+    // Leaflet needs invalidateSize() after the container is in the DOM
+    // so it calculates the correct center. Also strip internal padding.
+    setTimeout(() => {
+      if (!this._mapCard) return;
+      const root1 = this._mapCard.shadowRoot;
+      if (!root1) return;
+      // Remove padding from the map card's inner ha-card
+      const innerCard = root1.querySelector("ha-card");
+      if (innerCard) {
+        innerCard.style.padding = "0";
+        innerCard.style.overflow = "hidden";
+      }
+      // Find ha-map, then its shadow root contains the Leaflet map
+      const haMap = root1.querySelector("ha-map");
+      if (haMap && haMap.shadowRoot) {
+        const leafletEl = haMap.shadowRoot.getElementById("map");
+        if (leafletEl && leafletEl._leaflet_map) {
+          leafletEl._leaflet_map.invalidateSize();
+        }
+      }
+    }, 500);
   }
 
   _encodeImageUrl(url) {
