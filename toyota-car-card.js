@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.10.3";
+const CARD_VERSION = "1.10.4";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1687,7 +1687,7 @@ class ToyotaCarCard extends HTMLElement {
             border-radius: 10px;
             overflow: hidden;
             border: 1px solid var(--divider-color, #e0e0e0);
-            height: 200px;
+            height: 300px;
             position: relative;
           }
           .map-wrap > * {
@@ -1845,11 +1845,10 @@ class ToyotaCarCard extends HTMLElement {
       this._mapCard = await helpers.createCardElement({
         type: "map",
         entities: entityIds.map((id) => ({ entity: id })),
-        default_zoom: 14,
-        auto_fit: true,
+        default_zoom: 15,
         hours_to_show: 0,
       });
-      this._mapCard.style.height = "200px";
+      this._mapCard.style.height = "300px";
       this._mapCard.style.display = "block";
       this._mapCard.style.borderRadius = "0";
       this._mapCard.style.boxShadow = "none";
