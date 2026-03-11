@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.12.2";
+const CARD_VERSION = "1.12.3";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="600.000000pt" height="900.000000pt" viewBox="0 0 600.000000 900.000000"
@@ -1491,6 +1491,7 @@ class ToyotaCarCard extends HTMLElement {
           <style>
           :host {
             display: block;
+            height: auto !important;
             --ccc-ok: #4caf50;
             --ccc-warning: #ff9800;
             --ccc-critical: #f44336;
@@ -1498,7 +1499,6 @@ class ToyotaCarCard extends HTMLElement {
           ha-card {
             padding: 16px;
             overflow: visible;
-            height: auto !important;
           }
           .header {
             display: flex;
@@ -1955,7 +1955,6 @@ const ENTITY_KEYS = [
 class ToyotaCarCardEditor extends HTMLElement {
   constructor() {
     super();
-    this.attachShadow({ mode: "open" });
     this._pickers = [];
   }
 
@@ -1963,28 +1962,13 @@ class ToyotaCarCardEditor extends HTMLElement {
     this._config = { ...config };
     if (!this._config.entities) this._config.entities = {};
     this._rendered = false;
-    if (this._hass) this._ensureAndRender();
+    if (this._hass) this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
     for (const p of this._pickers) p.hass = hass;
-    if (this._config && !this._rendered) this._ensureAndRender();
-  }
-
-  async _ensureAndRender() {
-    if (!this._hass || !this._config) return;
-    try {
-      if (!customElements.get("ha-entity-picker")) {
-        const helpers = await (window.loadCardHelpers ? window.loadCardHelpers() : undefined);
-        if (helpers) {
-          const el = await helpers.createCardElement({ type: "entities", entities: [] });
-          if (el && el.constructor) { /* force load */ }
-        }
-      }
-    } catch (e) { /* proceed without waiting */ }
-    this._pickers = [];
-    this._render();
+    if (this._config && !this._rendered) this._render();
   }
 
   _fireChanged() {
@@ -2015,12 +1999,11 @@ class ToyotaCarCardEditor extends HTMLElement {
     this._rendered = true;
 
     const entities = this._config.entities || {};
-    const root = this.shadowRoot;
+    const root = this;
 
     root.innerHTML = `
       <style>
-        :host { display: block; }
-        .editor {
+        .tcc-editor {
           padding: 16px;
           font-family: var(--paper-font-body1_-_font-family, "Roboto", sans-serif);
           font-size: 14px;
@@ -2028,15 +2011,15 @@ class ToyotaCarCardEditor extends HTMLElement {
         }
 
         /* Text inputs */
-        .field { margin-bottom: 16px; }
-        .field label {
+        .tcc-editor .field { margin-bottom: 16px; }
+        .tcc-editor .field label {
           display: block;
           font-size: 12px;
           font-weight: 500;
           color: var(--secondary-text-color, #727272);
           margin-bottom: 6px;
         }
-        .field input[type="text"] {
+        .tcc-editor .tcc-editor .field input[type="text"] {
           width: 100%;
           box-sizing: border-box;
           padding: 10px 12px;
@@ -2048,18 +2031,18 @@ class ToyotaCarCardEditor extends HTMLElement {
           outline: none;
           transition: border-color 0.2s;
         }
-        .field input[type="text"]:focus {
+        .tcc-editor .field input[type="text"]:focus {
           border-color: var(--primary-color, #03a9f4);
         }
-        .field .hint {
+        .tcc-editor .tcc-editor .field .hint {
           font-size: 11px;
           color: var(--secondary-text-color, #727272);
           margin-top: 4px;
         }
 
         /* Toggles */
-        .section { margin-top: 24px; }
-        .section-title {
+        .tcc-editor .section { margin-top: 24px; }
+        .tcc-editor .tcc-editor .section-title {
           font-size: 13px;
           font-weight: 600;
           color: var(--primary-text-color);
@@ -2067,47 +2050,47 @@ class ToyotaCarCardEditor extends HTMLElement {
           padding-bottom: 6px;
           border-bottom: 1px solid var(--divider-color, #e0e0e0);
         }
-        .toggle-row {
+        .tcc-editor .tcc-editor .toggle-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 8px 0;
         }
-        .toggle-row label {
+        .tcc-editor .toggle-row label {
           font-size: 14px;
           color: var(--primary-text-color);
         }
         /* Custom toggle switch */
-        .switch {
+        .tcc-editor .tcc-editor .switch {
           position: relative;
           width: 40px; height: 22px;
           cursor: pointer;
         }
-        .switch input { display: none; }
-        .switch .slider {
+        .tcc-editor .switch input { display: none; }
+        .tcc-editor .switch .slider {
           position: absolute; top: 0; left: 0; right: 0; bottom: 0;
           background: var(--disabled-text-color, #bdbdbd);
           border-radius: 12px; transition: background 0.2s;
         }
-        .switch .slider::before {
+        .tcc-editor .tcc-editor .switch .slider::before {
           content: ""; position: absolute;
           width: 18px; height: 18px; left: 2px; bottom: 2px;
           background: #fff; border-radius: 50%; transition: transform 0.2s;
         }
-        .switch input:checked + .slider {
+        .tcc-editor .switch input:checked + .slider {
           background: var(--primary-color, #03a9f4);
         }
-        .switch input:checked + .slider::before {
+        .tcc-editor .tcc-editor .switch input:checked + .slider::before {
           transform: translateX(18px);
         }
 
         /* Entity picker */
-        .entity-section {
+        .tcc-editor .tcc-editor .entity-section {
           margin-top: 12px;
           border: 1px solid var(--divider-color, #e0e0e0);
           border-radius: 10px;
         }
-        .entity-section-header {
+        .tcc-editor .tcc-editor .entity-section-header {
           display: flex;
           align-items: center;
           padding: 10px 14px;
@@ -2118,23 +2101,23 @@ class ToyotaCarCardEditor extends HTMLElement {
           font-size: 13px;
           color: var(--primary-text-color);
         }
-        .entity-section-header .chevron {
+        .tcc-editor .tcc-editor .entity-section-header .chevron {
           margin-right: 10px;
           transition: transform 0.2s;
           font-size: 10px;
         }
-        .entity-section-header.collapsed .chevron {
+        .tcc-editor .entity-section-header.collapsed .chevron {
           transform: rotate(-90deg);
         }
-        .entity-section-body {
+        .tcc-editor .entity-section-body {
           padding: 8px 14px 14px;
         }
-        .entity-section-body.hidden { display: none; }
+        .tcc-editor .entity-section-body.hidden { display: none; }
 
-        .entity-row {
+        .tcc-editor .entity-row {
           margin-bottom: 12px;
         }
-        .entity-row label {
+        .tcc-editor .tcc-editor .entity-row label {
           display: block;
           font-size: 12px;
           font-weight: 500;
@@ -2142,10 +2125,10 @@ class ToyotaCarCardEditor extends HTMLElement {
           margin-bottom: 4px;
         }
       </style>
-      <div class="editor" id="editor-root"></div>
+      <div class="tcc-editor" id="editor-root"></div>
     `;
 
-    const editorRoot = root.getElementById("editor-root");
+    const editorRoot = root.querySelector("#editor-root");
 
     // ── Title field ──
     editorRoot.appendChild(this._makeTextField(
