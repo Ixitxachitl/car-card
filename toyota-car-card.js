@@ -1792,17 +1792,22 @@ const ENTITY_KEYS = [
   { key: "trunk_door_lock", label: "Trunk Lock", section: "Locks", domain: "binary_sensor" },
 ];
 
-// ── Visual card editor (no shadow DOM – HA pickers need light DOM) ──
+// ── Visual card editor (light DOM for HA component compatibility) ──
 class ToyotaCarCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { ...config };
     if (!this._config.entities) this._config.entities = {};
-    this._buildEditor();
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (this._config) this._buildEditor();
+    if (this._config) {
+      if (!this._editorBuilt) {
+        this._buildEditor();
+      } else {
+        this._syncPickers();
+      }
+    }
   }
 
   _fireConfigChanged() {
@@ -1831,65 +1836,72 @@ class ToyotaCarCardEditor extends HTMLElement {
     this._fireConfigChanged();
   }
 
-  _buildEditor() {
-    if (!this._hass || !this._config) return;
-
-    // Only build the DOM once; after that just update picker values
-    if (this._editorBuilt) {
-      this._syncPickers();
-      return;
+  connectedCallback() {
+    if (this._hass && this._config && !this._editorBuilt) {
+      this._buildEditor();
     }
+  }
+
+  _buildEditor() {
+    if (!this._hass || !this._config || !this.isConnected) return;
     this._editorBuilt = true;
 
-    // Use light DOM so HA components render correctly
-    this.innerHTML = "";
-
-    // Inject scoped styles
-    const style = document.createElement("style");
-    style.textContent = `
-      .tcc-editor { padding: 16px; }
-      .tcc-editor .tcc-section { margin-top: 24px; }
-      .tcc-editor .tcc-section-title {
-        font-size: 0.9em; font-weight: 500;
-        color: var(--primary-text-color);
-        margin-bottom: 8px; padding-bottom: 4px;
-        border-bottom: 1px solid var(--divider-color, #e0e0e0);
-      }
-      .tcc-editor .tcc-entity-row { margin-bottom: 8px; }
-      .tcc-editor .tcc-toggle-row {
-        display: flex; align-items: center;
-        justify-content: space-between; padding: 4px 0;
-      }
-      .tcc-editor .tcc-toggle-row span {
-        font-size: 0.9em; color: var(--primary-text-color);
-      }
-      .tcc-editor ha-textfield { display: block; margin-bottom: 12px; }
-      .tcc-editor ha-entity-picker { display: block; }
-      .tcc-editor .tcc-group-header {
-        display: flex; align-items: center; cursor: pointer;
-        padding: 10px 0 6px; user-select: none;
-      }
-      .tcc-editor .tcc-group-header .tcc-arrow {
-        display: inline-block; width: 0; height: 0;
-        border-left: 5px solid transparent; border-right: 5px solid transparent;
-        border-top: 6px solid var(--primary-text-color);
-        margin-right: 8px; transition: transform 0.2s;
-      }
-      .tcc-editor .tcc-group-header.open .tcc-arrow { transform: rotate(0deg); }
-      .tcc-editor .tcc-group-header:not(.open) .tcc-arrow { transform: rotate(-90deg); }
-      .tcc-editor .tcc-group-header span {
-        font-weight: 500; font-size: 0.88em;
-        text-transform: uppercase; letter-spacing: 0.4px;
-        color: var(--primary-color, #03a9f4);
-      }
-      .tcc-editor .tcc-group-body { padding: 0 0 4px 4px; }
-      .tcc-editor .tcc-group-body.collapsed { display: none; }
+    this.innerHTML = `
+      <style>
+        .tcc-editor { padding: 16px; }
+        .tcc-editor .tcc-section { margin-top: 24px; }
+        .tcc-editor .tcc-section-title {
+          font-size: 0.9em; font-weight: 500;
+          color: var(--primary-text-color);
+          margin-bottom: 8px; padding-bottom: 4px;
+          border-bottom: 1px solid var(--divider-color, #e0e0e0);
+        }
+        .tcc-editor .tcc-entity-row { margin-bottom: 8px; }
+        .tcc-editor .tcc-toggle-row {
+          display: flex; align-items: center;
+          justify-content: space-between; padding: 4px 0;
+        }
+        .tcc-editor .tcc-toggle-row span {
+          font-size: 0.9em; color: var(--primary-text-color);
+        }
+        .tcc-editor ha-textfield { display: block; margin-bottom: 12px; }
+        .tcc-editor ha-entity-picker { display: block; }
+        .tcc-editor .tcc-group-header {
+          display: flex; align-items: center; cursor: pointer;
+          padding: 10px 0 6px; user-select: none;
+        }
+        .tcc-editor .tcc-group-header .tcc-arrow {
+          display: inline-block; width: 0; height: 0;
+          border-left: 5px solid transparent; border-right: 5px solid transparent;
+          border-top: 6px solid var(--primary-text-color);
+          margin-right: 8px; transition: transform 0.2s;
+        }
+        .tcc-editor .tcc-group-header.tcc-open .tcc-arrow { transform: rotate(0deg); }
+        .tcc-editor .tcc-group-header:not(.tcc-open) .tcc-arrow { transform: rotate(-90deg); }
+        .tcc-editor .tcc-group-header span {
+          font-weight: 500; font-size: 0.88em;
+          text-transform: uppercase; letter-spacing: 0.4px;
+          color: var(--primary-color, #03a9f4);
+        }
+        .tcc-editor .tcc-group-body { padding: 0 0 4px 4px; }
+        .tcc-editor .tcc-group-body.tcc-collapsed { display: none; }
+      </style>
+      <div class="tcc-editor">
+        <div id="tcc-fields"></div>
+        <div class="tcc-section">
+          <div class="tcc-section-title">Visibility</div>
+          <div id="tcc-toggles"></div>
+        </div>
+        <div class="tcc-section">
+          <div class="tcc-section-title">Entities</div>
+          <div id="tcc-entities"></div>
+        </div>
+      </div>
     `;
-    this.appendChild(style);
 
-    const container = document.createElement("div");
-    container.className = "tcc-editor";
-    this.appendChild(container);
+    const fieldsContainer = this.querySelector("#tcc-fields");
+    const togglesContainer = this.querySelector("#tcc-toggles");
+    const entitiesContainer = this.querySelector("#tcc-entities");
 
     // ── Title ──
     const titleField = document.createElement("ha-textfield");
@@ -1898,7 +1910,7 @@ class ToyotaCarCardEditor extends HTMLElement {
     titleField.addEventListener("input", (e) =>
       this._updateConfig("title", e.target.value)
     );
-    container.appendChild(titleField);
+    fieldsContainer.appendChild(titleField);
 
     // ── Image URL ──
     const imageField = document.createElement("ha-textfield");
@@ -1907,7 +1919,7 @@ class ToyotaCarCardEditor extends HTMLElement {
     imageField.addEventListener("input", (e) =>
       this._updateConfig("image_url", e.target.value)
     );
-    container.appendChild(imageField);
+    fieldsContainer.appendChild(imageField);
 
     // ── Toggles ──
     const toggles = [
@@ -1921,13 +1933,6 @@ class ToyotaCarCardEditor extends HTMLElement {
       { key: "show_speed", label: "Show Speed", defaultOn: false },
       { key: "show_service", label: "Show Next Service", defaultOn: false },
     ];
-
-    const toggleSection = document.createElement("div");
-    toggleSection.className = "tcc-section";
-    const toggleTitle = document.createElement("div");
-    toggleTitle.className = "tcc-section-title";
-    toggleTitle.textContent = "Visibility";
-    toggleSection.appendChild(toggleTitle);
 
     for (const toggle of toggles) {
       const row = document.createElement("div");
@@ -1945,9 +1950,8 @@ class ToyotaCarCardEditor extends HTMLElement {
         this._updateConfig(toggle.key, e.target.checked)
       );
       row.appendChild(sw);
-      toggleSection.appendChild(row);
+      togglesContainer.appendChild(row);
     }
-    container.appendChild(toggleSection);
 
     // ── Entity pickers grouped by section ──
     const sectionMap = {};
@@ -1956,27 +1960,25 @@ class ToyotaCarCardEditor extends HTMLElement {
       sectionMap[def.section].push(def);
     }
 
-    const entitiesSection = document.createElement("div");
-    entitiesSection.className = "tcc-section";
-    const entitiesTitle = document.createElement("div");
-    entitiesTitle.className = "tcc-section-title";
-    entitiesTitle.textContent = "Entities";
-    entitiesSection.appendChild(entitiesTitle);
-
     this._entityPickers = {};
+    const pickerDefs = []; // store for deferred property assignment
 
     for (const [sectionName, defs] of Object.entries(sectionMap)) {
-      // Collapsible group header
       const header = document.createElement("div");
-      header.className = "tcc-group-header open";
-      header.innerHTML = `<div class="tcc-arrow"></div><span>${sectionName}</span>`;
+      header.className = "tcc-group-header tcc-open";
+      const arrow = document.createElement("div");
+      arrow.className = "tcc-arrow";
+      const headerLabel = document.createElement("span");
+      headerLabel.textContent = sectionName;
+      header.appendChild(arrow);
+      header.appendChild(headerLabel);
 
       const body = document.createElement("div");
       body.className = "tcc-group-body";
 
       header.addEventListener("click", () => {
-        const isOpen = header.classList.toggle("open");
-        body.classList.toggle("collapsed", !isOpen);
+        const isOpen = header.classList.toggle("tcc-open");
+        body.classList.toggle("tcc-collapsed", !isOpen);
       });
 
       for (const def of defs) {
@@ -1984,27 +1986,40 @@ class ToyotaCarCardEditor extends HTMLElement {
         row.className = "tcc-entity-row";
 
         const picker = document.createElement("ha-entity-picker");
-        picker.hass = this._hass;
-        picker.value = (this._config.entities || {})[def.key] || "";
-        picker.label = def.label;
         picker.setAttribute("allow-custom-entity", "");
-        // Filter by domain
-        picker.includeDomains = [def.domain];
         picker.addEventListener("value-changed", (e) => {
           e.stopPropagation();
           this._updateEntity(def.key, e.detail.value || "");
         });
 
         this._entityPickers[def.key] = picker;
+        pickerDefs.push({ picker, def });
         row.appendChild(picker);
         body.appendChild(row);
       }
 
-      entitiesSection.appendChild(header);
-      entitiesSection.appendChild(body);
+      entitiesContainer.appendChild(header);
+      entitiesContainer.appendChild(body);
     }
 
-    container.appendChild(entitiesSection);
+    // Wait for ha-entity-picker to be defined, then set properties
+    const applyPickerProps = () => {
+      for (const { picker, def } of pickerDefs) {
+        picker.hass = this._hass;
+        picker.label = def.label;
+        picker.value = (this._config.entities || {})[def.key] || "";
+        picker.includeDomains = [def.domain];
+      }
+    };
+
+    if (customElements.get("ha-entity-picker")) {
+      // Already defined – still defer one frame so the elements upgrade
+      requestAnimationFrame(() => applyPickerProps());
+    } else {
+      customElements.whenDefined("ha-entity-picker").then(() => {
+        requestAnimationFrame(() => applyPickerProps());
+      });
+    }
   }
 
   _syncPickers() {
