@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.13.7";
+const CARD_VERSION = "1.13.8";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -274,12 +274,13 @@ class ToyotaCarCard extends HTMLElement {
 
   getCardSize() {
     if (!this._config) return 8;
-    let size = 18; // header + tall SVG image (~810px)
-    if (this._config.show_fuel !== false) size += 2;
-    if (this._config.show_ev === true) size += 2;
+    let size = 2; // header
+    size += 8; // vehicle image
+    if (this._config.show_fuel !== false) size += 1;
+    if (this._config.show_ev === true) size += 1;
     if (this._config.show_odometer !== false || this._config.show_speed === true || this._config.show_service === true) size += 1;
     if (this._config.show_buttons !== false) size += 1;
-    if (this._config.show_map !== false) size += 12; // map is 500px + header
+    if (this._config.show_map !== false) size += 1; // map header only (map is beside, not below)
     return size;
   }
 
@@ -601,6 +602,19 @@ class ToyotaCarCard extends HTMLElement {
             padding: 16px;
             overflow: visible;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: row;
+            gap: 16px;
+          }
+          #card-content {
+            flex: 1;
+            min-width: 0;
+          }
+          #card-map {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
           }
           .header {
             display: flex;
@@ -772,7 +786,10 @@ class ToyotaCarCard extends HTMLElement {
 
           /* Map section */
           .map-section {
-            margin: 12px 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
           }
           .map-header {
             display: flex;
@@ -810,7 +827,7 @@ class ToyotaCarCard extends HTMLElement {
             border-radius: 10px;
             overflow: hidden;
             border: 1px solid var(--divider-color, #e0e0e0);
-            height: 500px;
+            flex: 1;
             position: relative;
           }
           .map-wrap > * {
