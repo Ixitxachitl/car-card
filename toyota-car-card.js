@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.13.5";
+const CARD_VERSION = "1.13.6";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -595,10 +595,12 @@ class ToyotaCarCard extends HTMLElement {
             --ccc-ok: #4caf50;
             --ccc-warning: #ff9800;
             --ccc-critical: #f44336;
+            display: block;
           }
           ha-card {
             padding: 16px;
             overflow: visible;
+            box-sizing: border-box;
           }
           .header {
             display: flex;
@@ -628,8 +630,7 @@ class ToyotaCarCard extends HTMLElement {
             border-radius: 8px;
           }
           .car-image svg {
-            max-width: 280px;
-            max-height: 500px;
+            max-width: 320px;
             width: 100%;
             height: auto;
           }
@@ -794,6 +795,17 @@ class ToyotaCarCard extends HTMLElement {
             gap: 4px;
             font-size: 0.9em;
           }
+          .map-labels a {
+            color: var(--primary-color, #03a9f4);
+            text-decoration: none;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+          }
+          .map-labels a:hover {
+            text-decoration: underline;
+          }
           .map-wrap {
             border-radius: 10px;
             overflow: hidden;
@@ -888,7 +900,23 @@ class ToyotaCarCard extends HTMLElement {
         const curLoc = currentLocationId ? this._getState(currentLocationId) : null;
         const parkedLoc = lastParkedId ? this._getState(lastParkedId) : null;
         if (curLoc) {
-          locLabels += `<span><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(curLoc.state || "Current")}</span>`;
+          const curState = curLoc.state || "Current";
+          const isZone = ["home", "not_home", "unknown", "unavailable"].includes(curState.toLowerCase()) === false
+            || curState.toLowerCase() === "home";
+          if (curState.toLowerCase() === "not_home" && curLoc.attributes && curLoc.attributes.latitude) {
+            const lat = curLoc.attributes.latitude;
+            const lon = curLoc.attributes.longitude;
+            const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
+            this._reverseGeocode(lat, lon).then(address => {
+              const el = this.shadowRoot.getElementById("cur-loc-label");
+              if (el) {
+                el.innerHTML = `<ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">${this._escapeHtml(address)}</a>`;
+              }
+            });
+            locLabels += `<span id="cur-loc-label"><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">${this._escapeHtml(`${lat.toFixed(4)}, ${lon.toFixed(4)}`)}</a></span>`;
+          } else {
+            locLabels += `<span><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(curState)}</span>`;
+          }
         }
         if (parkedLoc) {
           locLabels += `<span><ha-icon icon="mdi:parking" style="--mdc-icon-size: 16px;"></ha-icon> ${this._escapeHtml(parkedLoc.state || "Last Parked")}</span>`;
@@ -977,6 +1005,26 @@ class ToyotaCarCard extends HTMLElement {
       container.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 0.85em; color: var(--secondary-text-color);">Map unavailable</div>`;
     } finally {
       this._mapCardLoading = false;
+    }
+  }
+
+  async _reverseGeocode(lat, lon) {
+    const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    if (this._geocodeCache && this._geocodeCache[cacheKey]) {
+      return this._geocodeCache[cacheKey];
+    }
+    try {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`, {
+        headers: { "Accept": "application/json" }
+      });
+      if (!resp.ok) return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      const data = await resp.json();
+      const addr = data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      if (!this._geocodeCache) this._geocodeCache = {};
+      this._geocodeCache[cacheKey] = addr;
+      return addr;
+    } catch {
+      return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
     }
   }
 
