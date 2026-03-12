@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.13.9";
+const CARD_VERSION = "1.14.0";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -230,8 +230,25 @@ class ToyotaCarCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const oldHass = this._hass;
     this._hass = hass;
     if (this.shadowRoot) {
+      // Only re-render if a relevant entity actually changed
+      if (oldHass && this._config) {
+        const relevantIds = [
+          ...Object.values(this._config.entities || {}),
+          this._config.lock_entity,
+          this._config.engine_status_entity,
+        ].filter(Boolean);
+        const changed = relevantIds.some(
+          (id) => hass.states[id] !== oldHass.states[id]
+        );
+        if (!changed) {
+          // Still update map hass without full re-render
+          if (this._mapCard) this._mapCard.hass = hass;
+          return;
+        }
+      }
       this._render();
     }
   }
@@ -326,6 +343,7 @@ class ToyotaCarCard extends HTMLElement {
     const frTireId = this._getEntityId("sensor", "front_passenger_tire");
     const rlTireId = this._getEntityId("sensor", "rear_driver_tire");
     const rrTireId = this._getEntityId("sensor", "rear_passenger_tire");
+    const lastTireUpdateId = this._getEntityId("sensor", "last_tire_update");
 
     // Door binary sensors
     const doorFL = this._getEntityId("binary_sensor", "front_driver_door");
@@ -391,6 +409,8 @@ class ToyotaCarCard extends HTMLElement {
     const tireUnit =
       this._getState(flTireId)?.attributes?.unit_of_measurement ||
       this._getState(frTireId)?.attributes?.unit_of_measurement || "psi";
+
+    const lastTireUpdate = this._getStateValue(lastTireUpdateId);
 
     const evBattery = this._getStateValue(evBatteryId);
     const evRange = this._getStateValue(evRangeId);
@@ -483,10 +503,15 @@ class ToyotaCarCard extends HTMLElement {
       overlays += makeOverlay(ltr, "Trunk Lock", ltr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-trunk", "Unlocked", "Locked");
     }
 
+    const tireUpdateLabel = (this._config.show_tires !== false && lastTireUpdate)
+      ? `<div class="tire-update-label">Tires updated: ${this._formatTimestamp(lastTireUpdate)}</div>`
+      : "";
+
     const imageSection = `<div class="car-image-container">
       <div class="car-image">${vehicleImg}</div>
       ${overlays}
-    </div>`;
+    </div>
+    ${tireUpdateLabel}`;
 
     // Gather location tracker IDs for the map section
     let mapTrackerIds = [];
@@ -739,6 +764,12 @@ class ToyotaCarCard extends HTMLElement {
           .car-image-container .car-image {
             margin: 0;
           }
+          .tire-update-label {
+            text-align: center;
+            font-size: 0.75em;
+            color: var(--secondary-text-color, #888);
+            margin: -12px 0 8px 0;
+          }
 
           /* Overlay indicator base */
           .ov {
@@ -979,25 +1010,26 @@ class ToyotaCarCard extends HTMLElement {
         card.querySelectorAll(".action-btn").forEach((btn) => {
           btn.addEventListener("click", (e) => {
             const action = btn.dataset.action;
+            const deviceId = this._config.vehicle;
             if (action === "lock" && this._config.lock_entity) {
               const lockState = this._getState(this._config.lock_entity);
               const service = lockState && lockState.state === "locked" ? "unlock" : "lock";
               this._hass.callService("lock", service, {
                 entity_id: this._config.lock_entity,
               });
+              if (deviceId) setTimeout(() => this._hass.callService("toyota_na", "refresh", { vehicle: deviceId }), 5000);
             } else if (action === "engine_toggle") {
               const engEnt = this._config.engine_status_entity;
               const engState = engEnt ? this._getState(engEnt) : null;
               const running = engState && engState.state === "on";
-              const deviceId = this._config.vehicle;
               if (!deviceId) return;
               this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", { vehicle: deviceId });
+              setTimeout(() => this._hass.callService("toyota_na", "refresh", { vehicle: deviceId }), 5000);
             } else if (action === "hazards_on" || action === "hazards_off") {
-              const deviceId = this._config.vehicle;
               if (!deviceId) return;
               this._hass.callService("toyota_na", action, { vehicle: deviceId });
+              setTimeout(() => this._hass.callService("toyota_na", "refresh", { vehicle: deviceId }), 5000);
             } else if (action === "refresh") {
-              const deviceId = this._config.vehicle;
               if (!deviceId) return;
               this._hass.callService("toyota_na", "refresh", { vehicle: deviceId });
             }
@@ -1124,6 +1156,7 @@ const ENTITY_KEYS = [
   { key: "front_passenger_tire", label: "Front Passenger Tire", section: "Tires", domain: "sensor" },
   { key: "rear_driver_tire", label: "Rear Driver Tire", section: "Tires", domain: "sensor" },
   { key: "rear_passenger_tire", label: "Rear Passenger Tire", section: "Tires", domain: "sensor" },
+  { key: "last_tire_update", label: "Last Tire Update", section: "Tires", domain: "sensor" },
   { key: "ev_battery_level", label: "EV Battery Level", section: "EV", domain: "sensor" },
   { key: "ev_range", label: "EV Range", section: "EV", domain: "sensor" },
   { key: "front_driver_door", label: "Front Driver Door", section: "Doors", domain: "binary_sensor" },
