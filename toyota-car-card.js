@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.14.1";
+const CARD_VERSION = "1.14.2";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -1201,7 +1201,6 @@ const ENTITY_KEYS = [
   { key: "trunk_door_lock", label: "Trunk Lock", section: "Locks", domain: "binary_sensor" },
   { key: "current_location", label: "Current Location", section: "Location", domain: "device_tracker" },
   { key: "last_parked_location", label: "Last Parked Location", section: "Location", domain: "device_tracker" },
-  { key: "engine_status", label: "Engine Status (Remote Start)", section: "General", domain: "binary_sensor" },
 ];
 
 // ── Visual card editor ──
@@ -1215,6 +1214,16 @@ class ToyotaCarCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = JSON.parse(JSON.stringify(config || {}));
     if (!this._config.entities) this._config.entities = {};
+    // Save expanded state of panels before rebuild
+    if (this.shadowRoot) {
+      const panels = this.shadowRoot.querySelectorAll("ha-expansion-panel");
+      if (panels.length > 0) {
+        this._expandedState = {};
+        panels.forEach((p) => {
+          if (p.header) this._expandedState[p.header] = p.expanded;
+        });
+      }
+    }
     this._build();
   }
 
@@ -1373,7 +1382,7 @@ class ToyotaCarCardEditor extends HTMLElement {
     const actPanel = document.createElement("ha-expansion-panel");
     actPanel.outlined = true;
     actPanel.header = "Action Buttons";
-    actPanel.expanded = true;
+    actPanel.expanded = this._expandedState ? (this._expandedState["Action Buttons"] ?? true) : true;
 
     const actContent = document.createElement("div");
     actContent.className = "section-content";
@@ -1419,6 +1428,7 @@ class ToyotaCarCardEditor extends HTMLElement {
       const panel = document.createElement("ha-expansion-panel");
       panel.outlined = true;
       panel.header = sectionName;
+      panel.expanded = this._expandedState ? (this._expandedState[sectionName] ?? false) : false;
 
       const content = document.createElement("div");
       content.className = "section-content";
