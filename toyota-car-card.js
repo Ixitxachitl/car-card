@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.14.0";
+const CARD_VERSION = "1.14.1";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -337,6 +337,8 @@ class ToyotaCarCard extends HTMLElement {
     const speedId = this._getEntityId("sensor", "speed");
     const nextServiceId = this._getEntityId("sensor", "next_service");
     const lastUpdateId = this._getEntityId("sensor", "last_update_timestamp");
+    const tripAId = this._getEntityId("sensor", "trip_a");
+    const tripBId = this._getEntityId("sensor", "trip_b");
 
     // Tire entities
     const flTireId = this._getEntityId("sensor", "front_driver_tire");
@@ -396,6 +398,8 @@ class ToyotaCarCard extends HTMLElement {
     const speed = this._getStateValue(speedId);
     const nextService = this._getStateValue(nextServiceId);
     const lastUpdate = this._getStateValue(lastUpdateId);
+    const tripA = this._getStateValue(tripAId);
+    const tripB = this._getStateValue(tripBId);
 
     const odometerUnit =
       this._getState(odometerId)?.attributes?.unit_of_measurement || "mi";
@@ -622,6 +626,22 @@ class ToyotaCarCard extends HTMLElement {
         ? `<div class="info-chip">
              <ha-icon icon="mdi:wrench-clock"></ha-icon>
              <span>${this._formatNumber(nextService)} ${this._escapeHtml(odometerUnit)}</span>
+           </div>`
+        : "";
+
+    const tripASection =
+      tripA !== null
+        ? `<div class="info-chip">
+             <ha-icon icon="mdi:map-marker-path"></ha-icon>
+             <span>Trip A: ${this._formatNumber(tripA)} ${this._escapeHtml(odometerUnit)}</span>
+           </div>`
+        : "";
+
+    const tripBSection =
+      tripB !== null
+        ? `<div class="info-chip">
+             <ha-icon icon="mdi:map-marker-path"></ha-icon>
+             <span>Trip B: ${this._formatNumber(tripB)} ${this._escapeHtml(odometerUnit)}</span>
            </div>`
         : "";
 
@@ -945,6 +965,8 @@ class ToyotaCarCard extends HTMLElement {
 
       <div class="info-chips">
         ${odometerSection}
+        ${tripASection}
+        ${tripBSection}
         ${speedSection}
         ${serviceSection}
       </div>
@@ -1151,6 +1173,8 @@ const ENTITY_KEYS = [
   { key: "odometer", label: "Odometer", section: "General", domain: "sensor" },
   { key: "speed", label: "Speed", section: "General", domain: "sensor" },
   { key: "next_service", label: "Next Service", section: "General", domain: "sensor" },
+  { key: "trip_a", label: "Trip A", section: "General", domain: "sensor" },
+  { key: "trip_b", label: "Trip B", section: "General", domain: "sensor" },
   { key: "last_update_timestamp", label: "Last Update", section: "General", domain: "sensor" },
   { key: "front_driver_tire", label: "Front Driver Tire", section: "Tires", domain: "sensor" },
   { key: "front_passenger_tire", label: "Front Passenger Tire", section: "Tires", domain: "sensor" },
