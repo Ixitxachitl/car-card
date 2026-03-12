@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.13.2";
+const CARD_VERSION = "1.13.3";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -735,8 +735,8 @@ class ToyotaCarCard extends HTMLElement {
           }
 
           /* Tire positions – at the wheels */
-          .ov-tire-fl { top: 20%; left: 18%; }
-          .ov-tire-fr { top: 20%; right: 18%; }
+          .ov-tire-fl { top: 15%; left: 18%; }
+          .ov-tire-fr { top: 15%; right: 18%; }
           .ov-tire-rl { top: 75%; left: 18%; }
           .ov-tire-rr { top: 75%; right: 18%; }
 
@@ -757,7 +757,7 @@ class ToyotaCarCard extends HTMLElement {
           .ov-win-rr { top: 50%; right: 18%; }
 
           /* Moonroof – center-top */
-          .ov-moonroof { top: 45%; left: 50%; transform: translateX(-50%); }
+          .ov-moonroof { top: 40%; left: 50%; transform: translateX(-50%); }
 
           /* Lock positions – below doors */
           .ov-lock-fl { top: 40%; left: 10%; }
