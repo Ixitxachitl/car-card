@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.12.8";
+const CARD_VERSION = "1.12.9";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -735,36 +735,36 @@ class ToyotaCarCard extends HTMLElement {
           }
 
           /* Tire positions – at the wheels */
-          .ov-tire-fl { top: 16%; left: 10%; }
-          .ov-tire-fr { top: 16%; right: 10%; }
-          .ov-tire-rl { top: 70%; left: 10%; }
-          .ov-tire-rr { top: 70%; right: 10%; }
+          .ov-tire-fl { top: 24%; left: 4%; }
+          .ov-tire-fr { top: 24%; right: 4%; }
+          .ov-tire-rl { top: 80%; left: 4%; }
+          .ov-tire-rr { top: 80%; right: 4%; }
 
           /* Door positions – on the door panels */
-          .ov-door-fl { top: 30%; left: 14%; }
-          .ov-door-fr { top: 30%; right: 14%; }
-          .ov-door-rl { top: 50%; left: 14%; }
-          .ov-door-rr { top: 50%; right: 14%; }
+          .ov-door-fl { top: 32%; left: 8%; }
+          .ov-door-fr { top: 32%; right: 8%; }
+          .ov-door-rl { top: 47%; left: 8%; }
+          .ov-door-rr { top: 47%; right: 8%; }
 
           /* Hood and trunk – top and bottom center */
-          .ov-hood { top: 4%; left: 50%; transform: translateX(-50%); }
+          .ov-hood { top: 5%; left: 50%; transform: translateX(-50%); }
           .ov-trunk { bottom: 2%; left: 50%; transform: translateX(-50%); }
 
           /* Window positions – inside of doors */
-          .ov-win-fl { top: 30%; left: 26%; }
-          .ov-win-fr { top: 30%; right: 26%; }
-          .ov-win-rl { top: 50%; left: 26%; }
-          .ov-win-rr { top: 50%; right: 26%; }
+          .ov-win-fl { top: 32%; left: 28%; }
+          .ov-win-fr { top: 32%; right: 28%; }
+          .ov-win-rl { top: 47%; left: 28%; }
+          .ov-win-rr { top: 47%; right: 28%; }
 
           /* Moonroof – center-top */
-          .ov-moonroof { top: 22%; left: 50%; transform: translateX(-50%); }
+          .ov-moonroof { top: 23%; left: 50%; transform: translateX(-50%); }
 
           /* Lock positions – below doors */
-          .ov-lock-fl { top: 38%; left: 14%; }
-          .ov-lock-fr { top: 38%; right: 14%; }
-          .ov-lock-rl { top: 58%; left: 14%; }
-          .ov-lock-rr { top: 58%; right: 14%; }
-          .ov-lock-trunk { bottom: 10%; left: 50%; transform: translateX(-50%); }
+          .ov-lock-fl { top: 39%; left: 8%; }
+          .ov-lock-fr { top: 39%; right: 8%; }
+          .ov-lock-rl { top: 54%; left: 8%; }
+          .ov-lock-rr { top: 54%; right: 8%; }
+          .ov-lock-trunk { bottom: 8%; left: 50%; transform: translateX(-50%); }
 
           /* Map section */
           .map-section {
