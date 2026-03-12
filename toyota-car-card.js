@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.13.6";
+const CARD_VERSION = "1.13.7";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -274,12 +274,12 @@ class ToyotaCarCard extends HTMLElement {
 
   getCardSize() {
     if (!this._config) return 8;
-    let size = 10; // header + image (tall SVG)
-    if (this._config.show_fuel !== false) size += 1;
-    if (this._config.show_ev === true) size += 1;
+    let size = 18; // header + tall SVG image (~810px)
+    if (this._config.show_fuel !== false) size += 2;
+    if (this._config.show_ev === true) size += 2;
     if (this._config.show_odometer !== false || this._config.show_speed === true || this._config.show_service === true) size += 1;
     if (this._config.show_buttons !== false) size += 1;
-    if (this._config.show_map !== false) size += 10; // map is 500px = 10 units
+    if (this._config.show_map !== false) size += 12; // map is 500px + header
     return size;
   }
 
