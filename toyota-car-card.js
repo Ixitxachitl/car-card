@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.13.8";
+const CARD_VERSION = "1.13.9";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -521,6 +521,18 @@ class ToyotaCarCard extends HTMLElement {
         <ha-icon icon="mdi:${engineRunning ? 'engine-off' : 'engine'}" style="--mdc-icon-size: 20px;"></ha-icon>
         <span>${engineRunning ? 'Stop' : 'Start'} Engine</span>
       </button>`;
+      buttons += `<button class="action-btn" data-action="hazards_on" title="Turn On Hazards">
+        <ha-icon icon="mdi:hazard-lights" style="--mdc-icon-size: 20px;"></ha-icon>
+        <span>Hazards On</span>
+      </button>`;
+      buttons += `<button class="action-btn" data-action="hazards_off" title="Turn Off Hazards">
+        <ha-icon icon="mdi:hazard-lights" style="--mdc-icon-size: 20px;"></ha-icon>
+        <span>Hazards Off</span>
+      </button>`;
+      buttons += `<button class="action-btn" data-action="refresh" title="Refresh Vehicle Data">
+        <ha-icon icon="mdi:refresh" style="--mdc-icon-size: 20px;"></ha-icon>
+        <span>Refresh</span>
+      </button>`;
       if (buttons) {
         buttonsSection = `<div class="actions-row">${buttons}</div>`;
       }
@@ -837,6 +849,7 @@ class ToyotaCarCard extends HTMLElement {
           /* Action buttons */
           .actions-row {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
             margin: 12px 0;
           }
@@ -870,6 +883,14 @@ class ToyotaCarCard extends HTMLElement {
           }
           .action-btn-stop:hover {
             background: var(--ccc-critical, #f44336);
+            color: #fff;
+          }
+          .action-btn-warning {
+            border-color: var(--ccc-warning, #ff9800);
+            color: var(--ccc-warning, #ff9800);
+          }
+          .action-btn-warning:hover {
+            background: var(--ccc-warning, #ff9800);
             color: #fff;
           }
         </style>
@@ -971,6 +992,14 @@ class ToyotaCarCard extends HTMLElement {
               const deviceId = this._config.vehicle;
               if (!deviceId) return;
               this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", { vehicle: deviceId });
+            } else if (action === "hazards_on" || action === "hazards_off") {
+              const deviceId = this._config.vehicle;
+              if (!deviceId) return;
+              this._hass.callService("toyota_na", action, { vehicle: deviceId });
+            } else if (action === "refresh") {
+              const deviceId = this._config.vehicle;
+              if (!deviceId) return;
+              this._hass.callService("toyota_na", "refresh", { vehicle: deviceId });
             }
           });
         });
