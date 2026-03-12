@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.13.0";
+const CARD_VERSION = "1.13.1";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -741,29 +741,29 @@ class ToyotaCarCard extends HTMLElement {
           .ov-tire-rr { top: 80%; right: 14%; }
 
           /* Door positions – on the door panels */
-          .ov-door-fl { top: 33%; left: 18%; }
-          .ov-door-fr { top: 33%; right: 18%; }
-          .ov-door-rl { top: 48%; left: 18%; }
-          .ov-door-rr { top: 48%; right: 18%; }
+          .ov-door-fl { top: 33%; left: 10%; }
+          .ov-door-fr { top: 33%; right: 10%; }
+          .ov-door-rl { top: 48%; left: 10%; }
+          .ov-door-rr { top: 48%; right: 10%; }
 
           /* Hood and trunk – top and bottom center */
           .ov-hood { top: 8%; left: 50%; transform: translateX(-50%); }
           .ov-trunk { bottom: 2%; left: 50%; transform: translateX(-50%); }
 
           /* Window positions – inside of doors */
-          .ov-win-fl { top: 33%; left: 30%; }
-          .ov-win-fr { top: 33%; right: 30%; }
-          .ov-win-rl { top: 48%; left: 30%; }
-          .ov-win-rr { top: 48%; right: 30%; }
+          .ov-win-fl { top: 33%; left: 20%; }
+          .ov-win-fr { top: 33%; right: 20%; }
+          .ov-win-rl { top: 48%; left: 20%; }
+          .ov-win-rr { top: 48%; right: 20%; }
 
           /* Moonroof – center-top */
-          .ov-moonroof { top: 27%; left: 50%; transform: translateX(-50%); }
+          .ov-moonroof { top: 47%; left: 50%; transform: translateX(-50%); }
 
           /* Lock positions – below doors */
-          .ov-lock-fl { top: 40%; left: 18%; }
-          .ov-lock-fr { top: 40%; right: 18%; }
-          .ov-lock-rl { top: 55%; left: 18%; }
-          .ov-lock-rr { top: 55%; right: 18%; }
+          .ov-lock-fl { top: 40%; left: 10%; }
+          .ov-lock-fr { top: 40%; right: 10%; }
+          .ov-lock-rl { top: 55%; left: 10%; }
+          .ov-lock-rr { top: 55%; right: 10%; }
           .ov-lock-trunk { bottom: 8%; left: 50%; transform: translateX(-50%); }
 
           /* Map section */
