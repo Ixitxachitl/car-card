@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.13.4";
+const CARD_VERSION = "1.13.5";
 
 const TRUCK_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="192.000000pt" height="486.000000pt" viewBox="0 0 192.000000 486.000000"
@@ -274,12 +274,12 @@ class ToyotaCarCard extends HTMLElement {
 
   getCardSize() {
     if (!this._config) return 8;
-    let size = 4; // header + image
+    let size = 10; // header + image (tall SVG)
     if (this._config.show_fuel !== false) size += 1;
     if (this._config.show_ev === true) size += 1;
     if (this._config.show_odometer !== false || this._config.show_speed === true || this._config.show_service === true) size += 1;
     if (this._config.show_buttons !== false) size += 1;
-    if (this._config.show_map !== false) size += 8; // map is 400px = 8 units
+    if (this._config.show_map !== false) size += 10; // map is 500px = 10 units
     return size;
   }
 
@@ -489,9 +489,11 @@ class ToyotaCarCard extends HTMLElement {
 
     // Gather location tracker IDs for the map section
     let mapTrackerIds = [];
+    let mapHistoryEntityId = null;
     if (this._config.show_map !== false) {
       if (currentLocationId && this._getState(currentLocationId)) {
         mapTrackerIds.push(currentLocationId);
+        mapHistoryEntityId = currentLocationId;
       }
       if (lastParkedId && this._getState(lastParkedId)) {
         mapTrackerIds.push(lastParkedId);
@@ -626,7 +628,8 @@ class ToyotaCarCard extends HTMLElement {
             border-radius: 8px;
           }
           .car-image svg {
-            max-width: 320px;
+            max-width: 280px;
+            max-height: 500px;
             width: 100%;
             height: auto;
           }
@@ -795,7 +798,7 @@ class ToyotaCarCard extends HTMLElement {
             border-radius: 10px;
             overflow: hidden;
             border: 1px solid var(--divider-color, #e0e0e0);
-            height: 400px;
+            height: 500px;
             position: relative;
           }
           .map-wrap > * {
@@ -896,7 +899,7 @@ class ToyotaCarCard extends HTMLElement {
       // Create/update map card (persistent, never recreated)
       const mapContainer = this.shadowRoot.getElementById("map-container");
       if (mapContainer) {
-        this._updateMap(mapContainer, mapTrackerIds);
+        this._updateMap(mapContainer, mapTrackerIds, mapHistoryEntityId);
       }
     } else {
       cardMapEl.innerHTML = "";
@@ -937,7 +940,7 @@ class ToyotaCarCard extends HTMLElement {
     return div.innerHTML;
   }
 
-  async _updateMap(container, entityIds) {
+  async _updateMap(container, entityIds, historyEntityId) {
     // If map card already exists, just update hass
     if (this._mapCard) {
       this._mapCard.hass = this._hass;
@@ -958,7 +961,7 @@ class ToyotaCarCard extends HTMLElement {
         type: "map",
         entities: entityIds.map((id) => ({ entity: id })),
         default_zoom: 15,
-        hours_to_show: 0,
+        hours_to_show: historyEntityId ? 24 : 0,
       });
       this._mapCard.hass = this._hass;
 
