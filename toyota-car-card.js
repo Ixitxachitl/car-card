@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.15.0";
+const CARD_VERSION = "1.16.0";
 
 const CAR_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="219.000000pt" height="475.000000pt" viewBox="0 0 219.000000 475.000000"
@@ -602,20 +602,22 @@ class ToyotaCarCard extends HTMLElement {
       : defaultSvg;
 
     // Build overlay indicators positioned on the SVG
-    const makeOverlay = (state, label, icon, cssClass, openText = "Open", closedText = "Closed") => {
+    const makeOverlay = (state, label, icon, cssClass, entityId, openText = "Open", closedText = "Closed") => {
       if (state === null) return "";
       const isAlert = state === "on";
       const color = isAlert ? "var(--ccc-warning, #ff9800)" : "var(--ccc-ok, #4caf50)";
-      return `<div class="ov ${cssClass}" title="${label}: ${isAlert ? openText : closedText}">
+      const eAttr = entityId ? ` data-entity-id="${entityId}"` : "";
+      return `<div class="ov ${cssClass} clickable"${eAttr} title="${label}: ${isAlert ? openText : closedText}">
         <ha-icon icon="${icon}" style="--mdc-icon-size: 18px; color: ${color};"></ha-icon>
         <span class="ov-label" style="color: ${color};">${label}</span>
       </div>`;
     };
 
-    const makeTireOverlay = (val, label, cssClass) => {
+    const makeTireOverlay = (val, label, cssClass, entityId) => {
       if (val === null) return "";
       const color = tireColor(val);
-      return `<div class="ov ${cssClass}" title="${label}: ${val} ${tireUnit}">
+      const eAttr = entityId ? ` data-entity-id="${entityId}"` : "";
+      return `<div class="ov ${cssClass} clickable"${eAttr} title="${label}: ${val} ${tireUnit}">
         <span class="ov-tire" style="color: ${color};">${this._formatNumber(val)}</span>
         <span class="ov-label" style="color: ${color};">${tireUnit}</span>
       </div>`;
@@ -625,29 +627,29 @@ class ToyotaCarCard extends HTMLElement {
 
     // Tire overlays – at wheel positions
     if (this._config.show_tires !== false) {
-      overlays += makeTireOverlay(flTire, "Front Driver Tire", "ov-tire-fl");
-      overlays += makeTireOverlay(frTire, "Front Passenger Tire", "ov-tire-fr");
-      overlays += makeTireOverlay(rlTire, "Rear Driver Tire", "ov-tire-rl");
-      overlays += makeTireOverlay(rrTire, "Rear Passenger Tire", "ov-tire-rr");
+      overlays += makeTireOverlay(flTire, "Front Driver Tire", "ov-tire-fl", flTireId);
+      overlays += makeTireOverlay(frTire, "Front Passenger Tire", "ov-tire-fr", frTireId);
+      overlays += makeTireOverlay(rlTire, "Rear Driver Tire", "ov-tire-rl", rlTireId);
+      overlays += makeTireOverlay(rrTire, "Rear Passenger Tire", "ov-tire-rr", rrTireId);
     }
 
     // Door overlays – on the door areas
     if (this._config.show_doors !== false) {
-      overlays += makeOverlay(this._getStateValue(doorFL), "Door", "mdi:car-door", "ov-door-fl");
-      overlays += makeOverlay(this._getStateValue(doorFR), "Door", "mdi:car-door", "ov-door-fr");
-      overlays += makeOverlay(this._getStateValue(doorRL), "Door", "mdi:car-door", "ov-door-rl");
-      overlays += makeOverlay(this._getStateValue(doorRR), "Door", "mdi:car-door", "ov-door-rr");
-      overlays += makeOverlay(this._getStateValue(hoodId), "Hood", "mdi:car-back", "ov-hood");
-      overlays += makeOverlay(this._getStateValue(trunkId), "Trunk", "mdi:car-back", "ov-trunk");
+      overlays += makeOverlay(this._getStateValue(doorFL), "Door", "mdi:car-door", "ov-door-fl", doorFL);
+      overlays += makeOverlay(this._getStateValue(doorFR), "Door", "mdi:car-door", "ov-door-fr", doorFR);
+      overlays += makeOverlay(this._getStateValue(doorRL), "Door", "mdi:car-door", "ov-door-rl", doorRL);
+      overlays += makeOverlay(this._getStateValue(doorRR), "Door", "mdi:car-door", "ov-door-rr", doorRR);
+      overlays += makeOverlay(this._getStateValue(hoodId), "Hood", "mdi:car-back", "ov-hood", hoodId);
+      overlays += makeOverlay(this._getStateValue(trunkId), "Trunk", "mdi:car-back", "ov-trunk", trunkId);
     }
 
     // Window overlays – on the window areas
     if (this._config.show_windows !== false) {
-      overlays += makeOverlay(this._getStateValue(winFL), "Window", "mdi:car-windshield-outline", "ov-win-fl");
-      overlays += makeOverlay(this._getStateValue(winFR), "Window", "mdi:car-windshield-outline", "ov-win-fr");
-      overlays += makeOverlay(this._getStateValue(winRL), "Window", "mdi:car-windshield-outline", "ov-win-rl");
-      overlays += makeOverlay(this._getStateValue(winRR), "Window", "mdi:car-windshield-outline", "ov-win-rr");
-      overlays += makeOverlay(this._getStateValue(moonroof), "Moonroof", "mdi:car-select", "ov-moonroof");
+      overlays += makeOverlay(this._getStateValue(winFL), "Window", "mdi:car-windshield-outline", "ov-win-fl", winFL);
+      overlays += makeOverlay(this._getStateValue(winFR), "Window", "mdi:car-windshield-outline", "ov-win-fr", winFR);
+      overlays += makeOverlay(this._getStateValue(winRL), "Window", "mdi:car-windshield-outline", "ov-win-rl", winRL);
+      overlays += makeOverlay(this._getStateValue(winRR), "Window", "mdi:car-windshield-outline", "ov-win-rr", winRR);
+      overlays += makeOverlay(this._getStateValue(moonroof), "Moonroof", "mdi:car-select", "ov-moonroof", moonroof);
     }
 
     // Lock overlays – near the door handles
@@ -657,11 +659,11 @@ class ToyotaCarCard extends HTMLElement {
       const lrl = this._getStateValue(lockRL);
       const lrr = this._getStateValue(lockRR);
       const ltr = this._getStateValue(lockTrunk);
-      overlays += makeOverlay(lfl, "Lock", lfl === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-fl", "Unlocked", "Locked");
-      overlays += makeOverlay(lfr, "Lock", lfr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-fr", "Unlocked", "Locked");
-      overlays += makeOverlay(lrl, "Lock", lrl === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-rl", "Unlocked", "Locked");
-      overlays += makeOverlay(lrr, "Lock", lrr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-rr", "Unlocked", "Locked");
-      overlays += makeOverlay(ltr, "Trunk Lock", ltr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-trunk", "Unlocked", "Locked");
+      overlays += makeOverlay(lfl, "Lock", lfl === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-fl", lockFL, "Unlocked", "Locked");
+      overlays += makeOverlay(lfr, "Lock", lfr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-fr", lockFR, "Unlocked", "Locked");
+      overlays += makeOverlay(lrl, "Lock", lrl === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-rl", lockRL, "Unlocked", "Locked");
+      overlays += makeOverlay(lrr, "Lock", lrr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-rr", lockRR, "Unlocked", "Locked");
+      overlays += makeOverlay(ltr, "Trunk Lock", ltr === "on" ? "mdi:lock-open-variant" : "mdi:lock", "ov-lock-trunk", lockTrunk, "Unlocked", "Locked");
     }
 
     const tireUpdateLabel = (this._config.show_tires !== false && lastTireUpdate)
@@ -726,7 +728,7 @@ class ToyotaCarCard extends HTMLElement {
 
     const fuelSection =
       this._config.show_fuel && fuel !== null
-        ? `<div class="stat-row fuel-row">
+        ? `<div class="stat-row fuel-row clickable"${fuelId ? ` data-entity-id="${fuelId}"` : ""}>
              <div class="stat-icon"><ha-icon icon="mdi:gas-station"></ha-icon></div>
              <div class="stat-bar-container">
                <div class="stat-bar" style="width: ${Math.min(fuelNum, 100)}%; background: ${fuelColor};"></div>
@@ -735,7 +737,7 @@ class ToyotaCarCard extends HTMLElement {
            </div>
            ${
              distToEmpty !== null
-               ? `<div class="stat-detail">
+               ? `<div class="stat-detail clickable"${distToEmptyId ? ` data-entity-id="${distToEmptyId}"` : ""}>
                     <ha-icon icon="mdi:map-marker-distance"></ha-icon>
                     <span>${this._formatNumber(distToEmpty)} ${this._escapeHtml(distToEmptyUnit)} to empty</span>
                   </div>`
@@ -745,7 +747,7 @@ class ToyotaCarCard extends HTMLElement {
 
     const evSection =
       this._config.show_ev && evBattery !== null
-        ? `<div class="stat-row fuel-row">
+        ? `<div class="stat-row fuel-row clickable"${evBatteryId ? ` data-entity-id="${evBatteryId}"` : ""}>
              <div class="stat-icon"><ha-icon icon="mdi:ev-station"></ha-icon></div>
              <div class="stat-bar-container">
                <div class="stat-bar" style="width: ${Math.min(parseFloat(evBattery), 100)}%; background: ${fuelColor};"></div>
@@ -754,7 +756,7 @@ class ToyotaCarCard extends HTMLElement {
            </div>
            ${
              evRange !== null
-               ? `<div class="stat-detail">
+               ? `<div class="stat-detail clickable"${evRangeId ? ` data-entity-id="${evRangeId}"` : ""}>
                     <ha-icon icon="mdi:map-marker-distance"></ha-icon>
                     <span>${this._formatNumber(evRange)} ${this._escapeHtml(evRangeUnit)} EV range</span>
                   </div>`
@@ -764,7 +766,7 @@ class ToyotaCarCard extends HTMLElement {
 
     const odometerSection =
       this._config.show_odometer && odometer !== null
-        ? `<div class="info-chip">
+        ? `<div class="info-chip clickable"${odometerId ? ` data-entity-id="${odometerId}"` : ""}>
              <ha-icon icon="mdi:counter"></ha-icon>
              <span>${this._formatNumber(odometer)} ${this._escapeHtml(odometerUnit)}</span>
            </div>`
@@ -772,7 +774,7 @@ class ToyotaCarCard extends HTMLElement {
 
     const speedSection =
       this._config.show_speed && speed !== null
-        ? `<div class="info-chip">
+        ? `<div class="info-chip clickable"${speedId ? ` data-entity-id="${speedId}"` : ""}>
              <ha-icon icon="mdi:speedometer"></ha-icon>
              <span>${this._formatNumber(speed)} km/h</span>
            </div>`
@@ -780,7 +782,7 @@ class ToyotaCarCard extends HTMLElement {
 
     const serviceSection =
       this._config.show_service && nextService !== null
-        ? `<div class="info-chip">
+        ? `<div class="info-chip clickable"${nextServiceId ? ` data-entity-id="${nextServiceId}"` : ""}>
              <ha-icon icon="mdi:wrench-clock"></ha-icon>
              <span>${this._formatNumber(nextService)} ${this._escapeHtml(odometerUnit)}</span>
            </div>`
@@ -788,7 +790,7 @@ class ToyotaCarCard extends HTMLElement {
 
     const tripASection =
       tripA !== null
-        ? `<div class="info-chip">
+        ? `<div class="info-chip clickable"${tripAId ? ` data-entity-id="${tripAId}"` : ""}>
              <ha-icon icon="mdi:map-marker-path"></ha-icon>
              <span>Trip A: ${this._formatNumber(tripA)} ${this._escapeHtml(odometerUnit)}</span>
            </div>`
@@ -796,7 +798,7 @@ class ToyotaCarCard extends HTMLElement {
 
     const tripBSection =
       tripB !== null
-        ? `<div class="info-chip">
+        ? `<div class="info-chip clickable"${tripBId ? ` data-entity-id="${tripBId}"` : ""}>
              <ha-icon icon="mdi:map-marker-path"></ha-icon>
              <span>Trip B: ${this._formatNumber(tripB)} ${this._escapeHtml(odometerUnit)}</span>
            </div>`
@@ -949,6 +951,26 @@ class ToyotaCarCard extends HTMLElement {
           }
 
           /* Overlay indicator base */
+          .clickable {
+            cursor: pointer;
+          }
+          .clickable:hover {
+            opacity: 0.8;
+          }
+          .info-chip.clickable:hover {
+            background: var(--primary-color, #03a9f4);
+            color: #fff;
+            border-color: var(--primary-color, #03a9f4);
+          }
+          .fuel-row.clickable:hover {
+            opacity: 0.8;
+          }
+          .stat-detail.clickable:hover {
+            opacity: 0.8;
+          }
+          .last-update.clickable:hover {
+            text-decoration: underline;
+          }
           .ov {
             position: absolute;
             display: flex;
@@ -959,6 +981,9 @@ class ToyotaCarCard extends HTMLElement {
             z-index: 2;
             cursor: default;
             pointer-events: auto;
+          }
+          .ov.clickable {
+            cursor: pointer;
           }
           .ov-label {
             font-size: 9px;
@@ -1113,7 +1138,7 @@ class ToyotaCarCard extends HTMLElement {
     this.shadowRoot.getElementById("card-content").innerHTML = `
       <div class="header">
         <span class="title">${this._escapeHtml(this._config.title)}</span>
-        ${lastUpdate ? `<span class="last-update">Updated: ${this._formatTimestamp(lastUpdate)}</span>` : ""}
+        ${lastUpdate ? `<span class="last-update clickable"${lastUpdateId ? ` data-entity-id="${lastUpdateId}"` : ""}>Updated: ${this._formatTimestamp(lastUpdate)}</span>` : ""}
       </div>
 
       ${imageSection}
@@ -1180,6 +1205,17 @@ class ToyotaCarCard extends HTMLElement {
     } else {
       cardMapEl.innerHTML = "";
       this._mapCard = null;
+    }
+
+    // Attach clickable entity info handlers
+    const card = this.shadowRoot.querySelector("ha-card");
+    if (card) {
+      card.querySelectorAll(".clickable[data-entity-id]").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._fireMoreInfo(el.dataset.entityId);
+        });
+      });
     }
 
     // Attach button event handlers
@@ -1283,6 +1319,16 @@ class ToyotaCarCard extends HTMLElement {
     } catch {
       return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
     }
+  }
+
+  _fireMoreInfo(entityId) {
+    if (!entityId) return;
+    const event = new CustomEvent("hass-more-info", {
+      detail: { entityId },
+      bubbles: true,
+      composed: true,
+    });
+    this.dispatchEvent(event);
   }
 
   _encodeImageUrl(url) {
