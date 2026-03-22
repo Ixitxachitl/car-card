@@ -4,7 +4,7 @@
  * https://github.com/widewing/ha-toyota-na
  */
 
-const CARD_VERSION = "1.16.0";
+const CARD_VERSION = "1.17.0";
 
 const CAR_SVG = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
  width="219.000000pt" height="475.000000pt" viewBox="0 0 219.000000 475.000000"
@@ -394,6 +394,7 @@ class ToyotaCarCard extends HTMLElement {
           ...Object.values(this._config.entities || {}),
           this._config.lock_entity,
           this._config.engine_status_entity,
+          this._config.hazard_status_entity,
         ].filter(Boolean);
         const changed = relevantIds.some(
           (id) => hass.states[id] !== oldHass.states[id]
@@ -429,6 +430,7 @@ class ToyotaCarCard extends HTMLElement {
       show_buttons: config.show_buttons !== false,
       lock_entity: config.lock_entity || null,
       engine_status_entity: config.engine_status_entity || null,
+      hazard_status_entity: config.hazard_status_entity || null,
       vehicle: config.vehicle || null,
       vehicle_type: config.vehicle_type || "car",
       ...config,
@@ -709,14 +711,17 @@ class ToyotaCarCard extends HTMLElement {
         <ha-icon icon="mdi:${engineRunning ? 'engine-off' : 'engine'}" style="--mdc-icon-size: 20px;"></ha-icon>
         <span>${engineRunning ? 'Stop' : 'Start'} Engine</span>
       </button>`;
-      buttons += `<button class="action-btn" data-action="hazards_on" title="Turn On Hazards">
-        <ha-icon icon="mdi:hazard-lights" style="--mdc-icon-size: 20px;"></ha-icon>
-        <span>Hazards On</span>
-      </button>`;
-      buttons += `<button class="action-btn" data-action="hazards_off" title="Turn Off Hazards">
-        <ha-icon icon="mdi:hazard-lights" style="--mdc-icon-size: 20px;"></ha-icon>
-        <span>Hazards Off</span>
-      </button>`;
+      const hazardEntity = this._config.hazard_status_entity;
+      if (hazardEntity) {
+        const hazardState = this._getState(hazardEntity);
+        if (hazardState) {
+          const hazardsOn = hazardState.state === "on";
+          buttons += `<button class="action-btn ${hazardsOn ? 'action-btn-stop' : ''}" data-action="hazard_toggle" title="${hazardsOn ? 'Turn Off' : 'Turn On'} Hazards">
+            <ha-icon icon="mdi:hazard-lights" style="--mdc-icon-size: 20px;"></ha-icon>
+            <span>Hazards ${hazardsOn ? 'Off' : 'On'}</span>
+          </button>`;
+        }
+      }
       buttons += `<button class="action-btn" data-action="refresh" title="Refresh Vehicle Data">
         <ha-icon icon="mdi:refresh" style="--mdc-icon-size: 20px;"></ha-icon>
         <span>Refresh</span>
@@ -1240,9 +1245,12 @@ class ToyotaCarCard extends HTMLElement {
               if (!deviceId) return;
               this._hass.callService("toyota_na", running ? "engine_stop" : "engine_start", { vehicle: deviceId });
               setTimeout(() => this._hass.callService("toyota_na", "refresh", { vehicle: deviceId }), 5000);
-            } else if (action === "hazards_on" || action === "hazards_off") {
+            } else if (action === "hazard_toggle") {
               if (!deviceId) return;
-              this._hass.callService("toyota_na", action, { vehicle: deviceId });
+              const hazEnt = this._config.hazard_status_entity;
+              const hazState = hazEnt ? this._getState(hazEnt) : null;
+              const hazOn = hazState && hazState.state === "on";
+              this._hass.callService("toyota_na", hazOn ? "hazards_off" : "hazards_on", { vehicle: deviceId });
               setTimeout(() => this._hass.callService("toyota_na", "refresh", { vehicle: deviceId }), 5000);
             } else if (action === "refresh") {
               if (!deviceId) return;
@@ -1611,6 +1619,16 @@ class ToyotaCarCardEditor extends HTMLElement {
     engineHint.className = "hint";
     engineHint.textContent = "Engine button toggles between toyota_na.engine_start and toyota_na.engine_stop based on the status entity.";
     actContent.appendChild(engineHint);
+
+    actContent.appendChild(this._makeFormPicker(
+      "Hazard Status Entity", "binary_sensor", this._config.hazard_status_entity || "",
+      (val) => this._updateConfig("hazard_status_entity", val)
+    ));
+
+    const hazardHint = document.createElement("div");
+    hazardHint.className = "hint";
+    hazardHint.textContent = "Hazard button toggles between toyota_na.hazards_on and toyota_na.hazards_off based on the status entity. Hidden if not set.";
+    actContent.appendChild(hazardHint);
 
     // Vehicle device picker
     actContent.appendChild(this._makeFormDevicePicker(
